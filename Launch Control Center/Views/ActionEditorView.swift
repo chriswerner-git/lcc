@@ -166,11 +166,32 @@ struct ActionEditorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            actionRuntimeLimitNotice
         }
         .padding(14)
         .background(editorCardBackground)
         .overlay(editorCardBorder)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var actionRuntimeLimitNotice: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "timer")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 1)
+
+            Text("Reliability limit: total Action runtime cannot exceed 2 minutes. This includes all step delays and any Utility steps that run another Action.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func actionHasNoSteps(index: Int) -> Bool {

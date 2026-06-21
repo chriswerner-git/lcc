@@ -12,6 +12,7 @@
 //  Notes:
 //  - Launch at Startup is an app/user preference and is not exported with project configurations.
 //  - Prevent Computer Sleep is an app/user preference and is not exported with project configurations.
+//  - Operational Log Retention is an app/user preference and is not exported with project configurations.
 //  - Schedule enable toggles affect scheduled Events only.
 //  - Manual Action buttons still run regardless of schedule toggle state.
 //  - Show Actions execute UDP command steps.
@@ -21,7 +22,7 @@
 import Combine
 import Foundation
 
-class AppState: ObservableObject {
+final class AppState: ObservableObject {
     let udpService = UDPService()
 
     private let scheduleEngine = ScheduleEngine()
@@ -39,10 +40,23 @@ class AppState: ObservableObject {
     // same scheduled occurrence more than once.
     private var processedScheduleOccurrences: Set<String> = []
     private var processedScheduleOccurrenceDay: Date = Calendar.current.startOfDay(for: Date())
+    private var processedScheduleOccurrenceTotalCount: Int = 0
+
+    private let processedScheduleOccurrenceDailyLimit: Int = 1_000
+    private let processedScheduleOccurrenceTotalLimit: Int = 10_000
+
+    // Tracks Actions currently executing so the same Action cannot overlap itself.
+    private var runningActionIDs: Set<UUID> = []
+
+    private let maximumActionRuntimeSeconds: TimeInterval = 120
+    private let appLaunchDate = Date()
+
+    private var dailyHealthLogTimer: Timer?
 
     private let loginStartupService = LoginStartupService()
     private let sleepPreventionService = SleepPreventionService()
     private let systemLifecycleService = SystemLifecycleService()
+    private let logger = OperationalLogService.shared
 
     // MARK: - App Preferences
 
@@ -59,6 +73,23 @@ class AppState: ObservableObject {
     }
 
     @Published var preventComputerSleepStatusMessage: String = "Prevent computer sleep is disabled."
+
+    @Published var operationalLogRetentionDays: Int {
+        didSet {
+            let safeValue = clampedOperationalLogRetentionDays(
+                operationalLogRetentionDays
+            )
+
+            UserDefaults.standard.set(
+                safeValue,
+                forKey: "operationalLogRetentionDays"
+            )
+
+            if safeValue != operationalLogRetentionDays {
+                operationalLogRetentionDays = safeValue
+            }
+        }
+    }
 
     // MARK: - System Lifecycle
 
@@ -190,6 +221,7 @@ class AppState: ObservableObject {
 
     init() {
         self.preventComputerSleepEnabled = UserDefaults.standard.object(forKey: "preventComputerSleepEnabled") as? Bool ?? false
+        self.operationalLogRetentionDays = UserDefaults.standard.object(forKey: "operationalLogRetentionDays") as? Int ?? 90
 
         self.projectName = UserDefaults.standard.string(forKey: "projectName") ?? "Untitled Project"
         self.projectNotes = UserDefaults.standard.string(forKey: "projectNotes") ?? ""
@@ -226,13 +258,23 @@ class AppState: ObservableObject {
         self.scheduledEvents = PersistenceService.shared.loadScheduledEvents()
         self.scheduleEntries = PersistenceService.shared.loadScheduleEntries()
 
+        purgeOldOperationalLogs()
+
         refreshLaunchAtStartupStatus()
         applyPreventComputerSleepPreference()
         startSystemLifecycleMonitoring()
         startScheduleEngine()
+        startDailyHealthLogging()
+
+        logger.info("App launched. Project: \(projectName)")
     }
 
     deinit {
+        logger.info("AppState deinitializing. Stopping schedule engine, lifecycle monitoring, sleep prevention, and health logging.")
+
+        dailyHealthLogTimer?.invalidate()
+        dailyHealthLogTimer = nil
+
         scheduleEngine.stop()
         systemLifecycleService.stop()
         sleepPreventionService.disable()
@@ -271,10 +313,13 @@ class AppState: ObservableObject {
             lastMessage = enabled
                 ? "Launch at startup enabled"
                 : "Launch at startup disabled"
+
+            logger.info(lastMessage)
         } catch {
             refreshLaunchAtStartupStatus()
             controlStatus = .error
             lastMessage = "Launch at startup update failed: \(error.localizedDescription)"
+            logger.error(lastMessage)
         }
     }
 
@@ -301,12 +346,14 @@ class AppState: ObservableObject {
                 preventComputerSleepStatusMessage = "This Mac will not idle-sleep while Launch Control Center is running."
                 lastMessage = "Prevent computer sleep enabled"
                 controlStatus = .idle
+                logger.info(lastMessage)
             } catch {
                 sleepPreventionService.disable()
                 preventComputerSleepEnabled = false
                 preventComputerSleepStatusMessage = "Prevent computer sleep failed: \(error.localizedDescription)"
                 lastMessage = "Prevent computer sleep failed: \(error.localizedDescription)"
                 controlStatus = .error
+                logger.error(lastMessage)
             }
         } else {
             sleepPreventionService.disable()
@@ -314,6 +361,7 @@ class AppState: ObservableObject {
             preventComputerSleepStatusMessage = "Prevent computer sleep is disabled."
             lastMessage = "Prevent computer sleep disabled"
             controlStatus = .idle
+            logger.info(lastMessage)
         }
     }
 
@@ -324,6 +372,96 @@ class AppState: ObservableObject {
             sleepPreventionService.disable()
             refreshSleepPreventionStatus()
         }
+    }
+
+    // MARK: - Operational Logs
+
+    func openLogsFolder() {
+        do {
+            try logger.openLogsFolder()
+            lastMessage = "Opened logs folder"
+            controlStatus = .idle
+            logger.info(lastMessage)
+        } catch {
+            lastMessage = "Could not open logs folder: \(error.localizedDescription)"
+            controlStatus = .error
+            logger.error(lastMessage)
+        }
+    }
+
+    func purgeOldOperationalLogs() {
+        do {
+            let purgedCount = try logger.purgeLogFilesOlderThan(
+                days: operationalLogRetentionDays
+            )
+
+            logger.info("Operational log startup purge complete. Retention: \(operationalLogRetentionDays) days. Deleted files: \(purgedCount).")
+        } catch {
+            lastMessage = "Operational log purge failed: \(error.localizedDescription)"
+            logger.error(lastMessage)
+        }
+    }
+
+    private func clampedOperationalLogRetentionDays(_ value: Int) -> Int {
+        min(max(value, 1), 3650)
+    }
+
+    // MARK: - Daily Health Logging
+
+    private func startDailyHealthLogging() {
+        scheduleNextDailyHealthLog()
+    }
+
+    private func scheduleNextDailyHealthLog() {
+        dailyHealthLogTimer?.invalidate()
+
+        let calendar = Calendar.current
+
+        let nextMidnight = calendar.nextDate(
+            after: Date(),
+            matching: DateComponents(
+                hour: 0,
+                minute: 0,
+                second: 0
+            ),
+            matchingPolicy: .nextTime
+        ) ?? Date().addingTimeInterval(86_400)
+
+        let timer = Timer(
+            fire: nextMidnight,
+            interval: 0,
+            repeats: false
+        ) { [weak self] _ in
+            self?.writeDailyHealthLog()
+            self?.scheduleNextDailyHealthLog()
+        }
+
+        dailyHealthLogTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func writeDailyHealthLog() {
+        let appUptime = Date().timeIntervalSince(appLaunchDate)
+        let computerUptime = ProcessInfo.processInfo.systemUptime
+
+        logger.info(
+            """
+            Daily health check. App uptime: \(formattedDuration(appUptime)). Computer uptime: \(formattedDuration(computerUptime)). Actions: \(actionDefinitions.count). Saved scheduled Events: \(scheduledEvents.count). Schedule entries: \(scheduleEntries.count). Running Actions: \(runningActionIDs.count). Processed occurrences today: \(processedScheduleOccurrences.count). Processed occurrences total: \(processedScheduleOccurrenceTotalCount). UDP listener: \(udpService.listenerState.rawValue). Sleep prevention active: \(sleepPreventionService.isActive).
+            """
+        )
+    }
+
+    private func formattedDuration(_ interval: TimeInterval) -> String {
+        let totalSeconds = max(Int(interval), 0)
+        let days = totalSeconds / 86_400
+        let hours = (totalSeconds % 86_400) / 3_600
+        let minutes = (totalSeconds % 3_600) / 60
+
+        if days > 0 {
+            return "\(days)d \(hours)h \(minutes)m"
+        }
+
+        return "\(hours)h \(minutes)m"
     }
 
     // MARK: - System Lifecycle Monitoring
@@ -341,8 +479,8 @@ class AppState: ObservableObject {
             case .didWake(let date):
                 self.handleSystemDidWake(date)
 
-            case .didBecomeActive(let date):
-                self.handleAppDidBecomeActive(date)
+            case .didBecomeActive:
+                self.handleAppDidBecomeActive()
 
             case .willTerminate(let date):
                 self.handleAppWillTerminate(date)
@@ -361,6 +499,7 @@ class AppState: ObservableObject {
         systemLifecycleWarningMessage = "Mac is going to sleep. Scheduled Events will not run while asleep."
 
         lastMessage = "Mac will sleep at \(timestamp)"
+        logger.warning(lastMessage)
     }
 
     private func handleSystemDidWake(_ date: Date) {
@@ -372,9 +511,10 @@ class AppState: ObservableObject {
         systemLifecycleWarningMessage = "Mac woke at \(timestamp). Scheduled Events may have been missed."
 
         lastMessage = "Mac woke at \(timestamp). Scheduled Events may have been missed."
+        logger.warning(lastMessage)
     }
 
-    private func handleAppDidBecomeActive(_ date: Date) {
+    private func handleAppDidBecomeActive() {
         if systemLifecycleWarningMessage == nil {
             systemLifecycleStatusMessage = "System active. Monitoring sleep and wake events."
         }
@@ -385,6 +525,7 @@ class AppState: ObservableObject {
 
         systemLifecycleStatusMessage = "Launch Control Center is quitting at \(timestamp)."
         lastMessage = "Launch Control Center quitting at \(timestamp)"
+        logger.info(lastMessage)
 
         sleepPreventionService.disable()
     }
@@ -399,6 +540,7 @@ class AppState: ObservableObject {
         }
 
         lastMessage = "Sleep/wake warning cleared"
+        logger.info(lastMessage)
     }
 
     // MARK: - Import / Export
@@ -444,6 +586,8 @@ class AppState: ObservableObject {
 
         let data = try encoder.encode(configuration)
         try data.write(to: url, options: [.atomic])
+
+        logger.info("Exported configuration to \(url.lastPathComponent)")
     }
 
     func importConfiguration(from url: URL) throws {
@@ -495,12 +639,16 @@ class AppState: ObservableObject {
 
         processedScheduleOccurrences.removeAll()
         processedScheduleOccurrenceDay = Calendar.current.startOfDay(for: Date())
+        processedScheduleOccurrenceTotalCount = 0
+
+        runningActionIDs.removeAll()
 
         refreshLaunchAtStartupStatus()
         refreshSleepPreventionStatus()
 
         lastMessage = "Imported configuration: \(configuration.projectName)"
         controlStatus = .idle
+        logger.info(lastMessage)
     }
 
     // MARK: - Schedule Toggles
@@ -508,11 +656,13 @@ class AppState: ObservableObject {
     func setShowActionsEnabled(_ enabled: Bool) {
         showActionsEnabled = enabled
         lastMessage = enabled ? "Show Actions schedule enabled" : "Show Actions schedule disabled"
+        logger.info(lastMessage)
     }
 
     func setUtilityActionsEnabled(_ enabled: Bool) {
         utilityActionsEnabled = enabled
         lastMessage = enabled ? "Utility Actions schedule enabled" : "Utility Actions schedule disabled"
+        logger.info(lastMessage)
     }
 
     // MARK: - Action Execution
@@ -540,25 +690,46 @@ class AppState: ObservableObject {
         source: ActionRunSource,
         visitedActionIDs: Set<UUID>
     ) async {
+        guard beginActionRun(action, source: source) else {
+            return
+        }
+
+        defer {
+            finishActionRun(action)
+        }
+
+        let actionStartDate = Date()
         controlStatus = .sending
 
         switch source {
         case .manual:
             lastMessage = "Manual Action started: \(action.name)"
+            logger.info(lastMessage)
 
         case .scheduled:
             lastMessage = "Scheduled Action started: \(action.name)"
+            logger.info(lastMessage)
         }
+
+        let completed: Bool
 
         switch action.type {
         case .show:
-            await executeShowAction(action)
+            completed = await executeShowAction(
+                action,
+                actionStartDate: actionStartDate
+            )
 
         case .utility:
-            await executeUtilityAction(
+            completed = await executeUtilityAction(
                 action,
-                visitedActionIDs: visitedActionIDs
+                visitedActionIDs: visitedActionIDs,
+                actionStartDate: actionStartDate
             )
+        }
+
+        guard completed else {
+            return
         }
 
         let timestamp = formattedEventTimestamp(Date())
@@ -572,87 +743,188 @@ class AppState: ObservableObject {
         }
 
         lastEventMessage = "\(timestamp) — \(action.name)"
-        controlStatus = .idle
+        controlStatus = runningActionIDs.count > 1 ? .sending : .idle
+        logger.info(lastMessage)
     }
 
     @MainActor
-    private func executeShowAction(_ action: ActionDefinition) async {
+    private func beginActionRun(
+        _ action: ActionDefinition,
+        source: ActionRunSource
+    ) -> Bool {
+        guard runningActionIDs.contains(action.id) == false else {
+            switch source {
+            case .manual:
+                lastMessage = "Action already running: \(action.name)"
+
+            case .scheduled:
+                lastMessage = "Skipped scheduled Action already running: \(action.name)"
+            }
+
+            logger.warning(lastMessage)
+            return false
+        }
+
+        runningActionIDs.insert(action.id)
+        return true
+    }
+
+    @MainActor
+    private func finishActionRun(_ action: ActionDefinition) {
+        runningActionIDs.remove(action.id)
+
+        if runningActionIDs.isEmpty,
+           controlStatus == .sending {
+            controlStatus = .idle
+        }
+    }
+
+    @MainActor
+    private func actionIsRunning(_ actionID: UUID) -> Bool {
+        runningActionIDs.contains(actionID)
+    }
+
+    @MainActor
+    private func actionRuntimeIsAvailable(
+        actionName: String,
+        actionStartDate: Date
+    ) -> Bool {
+        let elapsed = Date().timeIntervalSince(actionStartDate)
+
+        guard elapsed < maximumActionRuntimeSeconds else {
+            lastMessage = "Action runtime exceeded 2-minute maximum: \(actionName)"
+            controlStatus = .error
+            logger.error(lastMessage)
+            return false
+        }
+
+        return true
+    }
+
+    @MainActor
+    private func executeShowAction(
+        _ action: ActionDefinition,
+        actionStartDate: Date
+    ) async -> Bool {
         guard action.commands.isEmpty == false else {
             lastMessage = "Show Action has no UDP Steps: \(action.name)"
-            return
+            logger.warning(lastMessage)
+            return false
         }
 
         for command in action.commands {
-            let delayCompleted = await waitForDelay(command.delaySeconds)
+            guard actionRuntimeIsAvailable(
+                actionName: action.name,
+                actionStartDate: actionStartDate
+            ) else {
+                return false
+            }
+
+            let delayCompleted = await waitForDelay(
+                command.delaySeconds,
+                actionName: action.name,
+                actionStartDate: actionStartDate
+            )
 
             guard delayCompleted else {
-                controlStatus = .idle
-                lastMessage = "Action cancelled: \(action.name)"
-                return
+                return false
             }
 
             guard sendUDPCommand(command) else {
                 controlStatus = .error
-                return
+                return false
             }
 
             lastMessage = "Sent Step: \(command.name)"
         }
+
+        return true
     }
 
     @MainActor
     private func executeUtilityAction(
         _ action: ActionDefinition,
-        visitedActionIDs: Set<UUID>
-    ) async {
+        visitedActionIDs: Set<UUID>,
+        actionStartDate: Date
+    ) async -> Bool {
         guard action.utilityCommands.isEmpty == false else {
             lastMessage = "Utility Action has no Steps: \(action.name)"
-            return
+            logger.warning(lastMessage)
+            return false
         }
 
         for command in action.utilityCommands {
-            let delayCompleted = await waitForDelay(command.delaySeconds)
-
-            guard delayCompleted else {
-                controlStatus = .idle
-                lastMessage = "Utility Action cancelled: \(action.name)"
-                return
+            guard actionRuntimeIsAvailable(
+                actionName: action.name,
+                actionStartDate: actionStartDate
+            ) else {
+                return false
             }
 
-            await executeUtilityCommand(
+            let delayCompleted = await waitForDelay(
+                command.delaySeconds,
+                actionName: action.name,
+                actionStartDate: actionStartDate
+            )
+
+            guard delayCompleted else {
+                return false
+            }
+
+            let commandCompleted = await executeUtilityCommand(
                 command,
                 parentAction: action,
-                visitedActionIDs: visitedActionIDs
+                visitedActionIDs: visitedActionIDs,
+                actionStartDate: actionStartDate
             )
+
+            guard commandCompleted else {
+                return false
+            }
         }
+
+        return true
     }
 
     @MainActor
     private func executeUtilityCommand(
         _ command: UtilityCommand,
         parentAction: ActionDefinition,
-        visitedActionIDs: Set<UUID>
-    ) async {
+        visitedActionIDs: Set<UUID>,
+        actionStartDate: Date
+    ) async -> Bool {
+        guard actionRuntimeIsAvailable(
+            actionName: parentAction.name,
+            actionStartDate: actionStartDate
+        ) else {
+            return false
+        }
+
         switch command.kind {
         case .setVolume:
             setVolume(command.volumeLevel)
             lastMessage = "Utility Step: set volume to \(Int(command.volumeLevel * 100))%"
+            return true
 
         case .setShowScheduleEnabled:
             setShowActionsEnabled(command.showScheduleEnabled)
+            return true
 
         case .setUtilityScheduleEnabled:
             setUtilityActionsEnabled(command.utilityScheduleEnabled)
+            return true
 
         case .runAction:
-            await executeRunActionUtilityCommand(
+            return await executeRunActionUtilityCommand(
                 command,
                 parentAction: parentAction,
-                visitedActionIDs: visitedActionIDs
+                visitedActionIDs: visitedActionIDs,
+                actionStartDate: actionStartDate
             )
 
         case .sendUDP:
             sendUtilityUDPCommand(command)
+            return controlStatus != .error
         }
     }
 
@@ -660,28 +932,46 @@ class AppState: ObservableObject {
     private func executeRunActionUtilityCommand(
         _ command: UtilityCommand,
         parentAction: ActionDefinition,
-        visitedActionIDs: Set<UUID>
-    ) async {
+        visitedActionIDs: Set<UUID>,
+        actionStartDate: Date
+    ) async -> Bool {
         guard let actionID = command.actionDefinitionID else {
             lastMessage = "Utility Step skipped: no Action selected"
-            return
+            logger.warning(lastMessage)
+            return false
         }
 
         guard actionID != parentAction.id else {
             lastMessage = "Utility Step skipped: Action cannot run itself"
-            return
+            logger.warning(lastMessage)
+            return false
         }
 
         guard visitedActionIDs.contains(actionID) == false else {
             lastMessage = "Utility Step skipped: recursive Action loop blocked"
-            return
+            logger.warning(lastMessage)
+            return false
         }
 
         guard let targetAction = actionDefinitions.first(where: {
             $0.id == actionID
         }) else {
             lastMessage = "Utility Step skipped: selected Action not found"
-            return
+            logger.warning(lastMessage)
+            return false
+        }
+
+        guard actionIsRunning(actionID) == false else {
+            lastMessage = "Utility Step skipped: Action already running: \(targetAction.name)"
+            logger.warning(lastMessage)
+            return false
+        }
+
+        guard actionRuntimeIsAvailable(
+            actionName: parentAction.name,
+            actionStartDate: actionStartDate
+        ) else {
+            return false
         }
 
         var updatedVisitedActionIDs = visitedActionIDs
@@ -692,24 +982,61 @@ class AppState: ObservableObject {
             source: .manual,
             visitedActionIDs: updatedVisitedActionIDs
         )
+
+        return actionRuntimeIsAvailable(
+            actionName: parentAction.name,
+            actionStartDate: actionStartDate
+        )
     }
 
     @MainActor
-    private func waitForDelay(_ delaySeconds: Double) async -> Bool {
+    private func waitForDelay(
+        _ delaySeconds: Double,
+        actionName: String,
+        actionStartDate: Date
+    ) async -> Bool {
         let delay = max(delaySeconds, 0)
 
         guard delay > 0 else {
-            return true
+            return actionRuntimeIsAvailable(
+                actionName: actionName,
+                actionStartDate: actionStartDate
+            )
         }
 
-        let nanoseconds = UInt64(delay * 1_000_000_000)
+        let elapsed = Date().timeIntervalSince(actionStartDate)
+        let remainingRuntime = maximumActionRuntimeSeconds - elapsed
+
+        guard remainingRuntime > 0 else {
+            return actionRuntimeIsAvailable(
+                actionName: actionName,
+                actionStartDate: actionStartDate
+            )
+        }
+
+        let sleepDuration = min(delay, remainingRuntime)
+        let nanoseconds = UInt64(sleepDuration * 1_000_000_000)
 
         do {
             try await Task.sleep(nanoseconds: nanoseconds)
-            return true
         } catch {
+            controlStatus = .idle
+            lastMessage = "Action cancelled: \(actionName)"
+            logger.warning(lastMessage)
             return false
         }
+
+        if delay > remainingRuntime {
+            lastMessage = "Action runtime exceeded 2-minute maximum: \(actionName)"
+            controlStatus = .error
+            logger.error(lastMessage)
+            return false
+        }
+
+        return actionRuntimeIsAvailable(
+            actionName: actionName,
+            actionStartDate: actionStartDate
+        )
     }
 
     func runSingleCommand(_ command: UDPCommand) {
@@ -726,6 +1053,7 @@ class AppState: ObservableObject {
         guard command.port >= 0,
               command.port <= Int(UInt16.max) else {
             lastMessage = "Invalid UDP port for Step: \(command.name)"
+            logger.error(lastMessage)
             return false
         }
 
@@ -744,6 +1072,7 @@ class AppState: ObservableObject {
               command.udpPort <= Int(UInt16.max) else {
             lastMessage = "Invalid UDP port for Utility Step: \(command.name)"
             controlStatus = .error
+            logger.error(lastMessage)
             return
         }
 
@@ -797,6 +1126,7 @@ class AppState: ObservableObject {
               volumeDestinationPort <= Int(UInt16.max) else {
             lastMessage = "Invalid volume UDP port"
             controlStatus = .error
+            logger.error(lastMessage)
             return
         }
 
@@ -882,6 +1212,10 @@ class AppState: ObservableObject {
             return
         }
 
+        guard processedOccurrenceLimitsAllowProcessing(now: now) else {
+            return
+        }
+
         let occurrenceKey = processedOccurrenceKey(
             event: event,
             occurrenceDate: occurrenceDate
@@ -892,20 +1226,47 @@ class AppState: ObservableObject {
         }
 
         processedScheduleOccurrences.insert(occurrenceKey)
+        processedScheduleOccurrenceTotalCount += 1
 
         guard let action = actionDefinitions.first(where: {
             $0.id == event.actionDefinitionID
         }) else {
             lastMessage = "Skipped scheduled Event: missing Action"
+            logger.warning(lastMessage)
             return
         }
 
         guard scheduledActionIsAllowed(action) else {
             lastMessage = "Skipped scheduled Action: \(action.name)"
+            logger.warning(lastMessage)
             return
         }
 
+        logger.info("Running scheduled Action: \(action.name)")
         runAction(action, source: .scheduled)
+    }
+
+    private func processedOccurrenceLimitsAllowProcessing(now: Date) -> Bool {
+        if processedScheduleOccurrences.count >= processedScheduleOccurrenceDailyLimit {
+            lastMessage = "Processed schedule occurrence daily limit reached. Clearing occurrence guard and skipping this tick."
+            logger.warning(lastMessage)
+
+            processedScheduleOccurrenceDay = Calendar.current.startOfDay(for: now)
+            processedScheduleOccurrences.removeAll()
+            return false
+        }
+
+        if processedScheduleOccurrenceTotalCount >= processedScheduleOccurrenceTotalLimit {
+            lastMessage = "Processed schedule occurrence total limit reached. Clearing occurrence guard and skipping this tick."
+            logger.warning(lastMessage)
+
+            processedScheduleOccurrenceDay = Calendar.current.startOfDay(for: now)
+            processedScheduleOccurrences.removeAll()
+            processedScheduleOccurrenceTotalCount = 0
+            return false
+        }
+
+        return true
     }
 
     private func scheduledActionIsAllowed(_ action: ActionDefinition) -> Bool {

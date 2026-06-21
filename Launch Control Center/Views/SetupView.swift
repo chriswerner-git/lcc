@@ -281,7 +281,47 @@ struct SetupView: View {
                 .toggleStyle(.switch)
             }
 
+            preferenceRow(
+                systemImage: "clock.arrow.circlepath",
+                title: "Operational Log Retention",
+                subtitle: "Old log files are purged on app startup. Default is 90 days."
+            ) {
+                HStack(spacing: 6) {
+                    TextField(
+                        "90",
+                        value: $appState.operationalLogRetentionDays,
+                        format: .number.grouping(.never)
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 72)
+
+                    Text("days")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            preferenceRow(
+                systemImage: "doc.text.magnifyingglass",
+                title: "Operational Logs",
+                subtitle: "Open the folder containing long-running diagnostic log files."
+            ) {
+                Button {
+                    appState.openLogsFolder()
+                } label: {
+                    Label("Open Logs Folder", systemImage: "folder")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
             Text("Prevent Computer Sleep keeps the Mac awake while Launch Control Center is running. It does not prevent sleep caused by closing a laptop lid, low battery, shutdown, restart, or choosing Sleep manually.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+
+            Text("Operational logs are disposable diagnostic files. Project configurations, Actions, and scheduled Events are not purged automatically.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

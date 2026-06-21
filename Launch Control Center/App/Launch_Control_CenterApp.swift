@@ -110,18 +110,45 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var menuBarExtra: some Scene {
-        MenuBarExtra(
-            "Launch Control Center",
-            systemImage: "antenna.radiowaves.left.and.right"
-        ) {
+        MenuBarExtra {
             MenuBarView()
                 .environmentObject(appState)
+        } label: {
+            menuBarIconLabel
         }
         .commands {
             appMenuCommands
             navigationCommands
             helpCommands
         }
+    }
+
+    // MARK: - Menu Bar Icon
+
+    private var menuBarIconLabel: some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "rocket.fill")
+                .imageScale(.large)
+
+            if scheduleIsActive {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 8, weight: .bold))
+                    .offset(x: 6, y: -5)
+            }
+        }
+        .accessibilityLabel(menuBarIconAccessibilityLabel)
+    }
+
+    private var scheduleIsActive: Bool {
+        appState.showActionsEnabled || appState.utilityActionsEnabled
+    }
+
+    private var menuBarIconAccessibilityLabel: String {
+        if scheduleIsActive {
+            return "Launch Control Center, schedule active"
+        }
+
+        return "Launch Control Center, schedule inactive"
     }
 
     // MARK: - Standard macOS App Menu Commands
@@ -186,6 +213,11 @@ struct Launch_Control_CenterApp: App {
                 activateApp()
             }
             .keyboardShortcut(",", modifiers: .command)
+
+            Button("Open Logs Folder") {
+                appState.openLogsFolder()
+                activateApp()
+            }
 
             Button("About Launch Control Center") {
                 openWindow(id: "about-lcc-window")
