@@ -1,15 +1,19 @@
 //
-//  ScheduledEventType.swift
+//  ActionType.swift
 //  Launch Control Center
 //
-//  Created by Chris Werner on 6/20/2026.
+//  Defines the category of an Action.
+//  Show Actions obey the Schedule Enabled toggle.
+//  Utility Actions may still run even when scheduled shows are disabled.
 //
 
 import Foundation
 
-enum ScheduledEventType: String, Codable, CaseIterable, Identifiable {
+enum ActionType: String, Codable, CaseIterable, Identifiable {
     case show = "Show"
     case utility = "Utility"
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 }

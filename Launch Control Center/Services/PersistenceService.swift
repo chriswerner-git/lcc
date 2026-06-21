@@ -2,71 +2,70 @@
 //  PersistenceService.swift
 //  Launch Control Center
 //
-//  Created by Chris Werner on 6/20/2026.
+//  Centralized persistence layer.
+//
+//  Responsible for saving and loading:
+//  - Actions
+//  - Events
+//  - Legacy Scheduled Events
+//
+//  Future enhancements:
+//  - JSON project files
+//  - Import / Export
+//  - Multi-project support
+//  - Cloud synchronization
 //
 
 import Foundation
 
-class PersistenceService {
+final class PersistenceService {
+
+    // MARK: - Singleton
+
     static let shared = PersistenceService()
 
     private init() {}
 
-    private let scheduledEventsKey = "scheduledEvents"
-    
-    private let eventDefinitionsKey = "eventDefinitions"
+    // MARK: - Storage Keys
+
+    private let actionsKey = "actions"
     private let scheduleEntriesKey = "scheduleEntries"
 
-    func saveScheduledEvents(_ events: [ScheduledEvent]) {
+    // Legacy model
+    private let scheduledEventsKey = "scheduledEvents"
+
+    // MARK: - Actions
+
+    func saveActionDefinitions(_ actions: [ActionDefinition]) {
         do {
-            let data = try JSONEncoder().encode(events)
-            UserDefaults.standard.set(data, forKey: scheduledEventsKey)
+            let data = try JSONEncoder().encode(actions)
+            UserDefaults.standard.set(data, forKey: actionsKey)
         } catch {
-            print("Failed to save scheduled events: \(error)")
+            print("Failed to save Actions: \(error)")
         }
     }
 
-    func loadScheduledEvents() -> [ScheduledEvent] {
-        guard let data = UserDefaults.standard.data(forKey: scheduledEventsKey) else {
+    func loadActionDefinitions() -> [ActionDefinition] {
+        guard let data = UserDefaults.standard.data(forKey: actionsKey) else {
             return []
         }
 
         do {
-            return try JSONDecoder().decode([ScheduledEvent].self, from: data)
+            return try JSONDecoder().decode([ActionDefinition].self, from: data)
         } catch {
-            print("Failed to load scheduled events: \(error)")
+            print("Failed to load Actions: \(error)")
             return []
-        }
-    }
-    
-    func saveEventDefinitions(_ definitions: [EventDefinition]) {
-        do {
-            let data = try JSONEncoder().encode(definitions)
-            UserDefaults.standard.set(data, forKey: eventDefinitionsKey)
-        } catch {
-            print("Failed to save event definitions: \(error)")
         }
     }
 
-    func loadEventDefinitions() -> [EventDefinition] {
-        guard let data = UserDefaults.standard.data(forKey: eventDefinitionsKey) else {
-            return []
-        }
-
-        do {
-            return try JSONDecoder().decode([EventDefinition].self, from: data)
-        } catch {
-            print("Failed to load event definitions: \(error)")
-            return []
-        }
-    }
+    // MARK: - Events
 
     func saveScheduleEntries(_ entries: [ScheduleEntry]) {
         do {
             let data = try JSONEncoder().encode(entries)
             UserDefaults.standard.set(data, forKey: scheduleEntriesKey)
         } catch {
-            print("Failed to save schedule entries: \(error)")
+            print("Failed to save Events: \(error)")
         }
     }
 
@@ -78,7 +77,31 @@ class PersistenceService {
         do {
             return try JSONDecoder().decode([ScheduleEntry].self, from: data)
         } catch {
-            print("Failed to load schedule entries: \(error)")
+            print("Failed to load Events: \(error)")
+            return []
+        }
+    }
+
+    // MARK: - Legacy Scheduled Events
+
+    func saveScheduledEvents(_ events: [ScheduledEvent]) {
+        do {
+            let data = try JSONEncoder().encode(events)
+            UserDefaults.standard.set(data, forKey: scheduledEventsKey)
+        } catch {
+            print("Failed to save legacy Scheduled Events: \(error)")
+        }
+    }
+
+    func loadScheduledEvents() -> [ScheduledEvent] {
+        guard let data = UserDefaults.standard.data(forKey: scheduledEventsKey) else {
+            return []
+        }
+
+        do {
+            return try JSONDecoder().decode([ScheduledEvent].self, from: data)
+        } catch {
+            print("Failed to load legacy Scheduled Events: \(error)")
             return []
         }
     }
