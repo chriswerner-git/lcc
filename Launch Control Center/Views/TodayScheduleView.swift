@@ -1,17 +1,23 @@
 //
-//  TodayScheduleView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Displays today's scheduled Events.
+//  File: TodayScheduleView.swift
+//  Purpose: Displays today's scheduled Events on the Dashboard.
 //
-//  Events determine when something happens.
-//  Actions determine what happens.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
 struct TodayScheduleView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Derived Events
 
     private var todaysEvents: [ScheduleEntry] {
         appState.scheduleEntries
@@ -20,6 +26,8 @@ struct TodayScheduleView: View {
                 occurrenceDateToday(for: $0) < occurrenceDateToday(for: $1)
             }
     }
+
+    // MARK: - Body
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { context in
@@ -32,52 +40,10 @@ struct TodayScheduleView: View {
                     if todaysEvents.isEmpty {
                         emptyState
                     } else {
-                        ScrollViewReader { scrollProxy in
-                            ScrollView(.vertical) {
-                                LazyVStack(alignment: .leading, spacing: 0) {
-                                    ForEach(todaysEvents) { event in
-                                        let occurrenceDate = occurrenceDateToday(for: event)
-
-                                        ScheduleEntryRow(
-                                            event: event,
-                                            occurrenceDate: occurrenceDate,
-                                            isPast: occurrenceDate < context.date,
-                                            isNext: event.id == nextEventID
-                                        )
-                                        .environmentObject(appState)
-                                        .id(event.id)
-
-                                        if event.id != todaysEvents.last?.id {
-                                            Divider()
-                                                .opacity(0.28)
-                                                .padding(.leading, 24)
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
-                            .onAppear {
-                                scrollToNextEvent(
-                                    nextEventID,
-                                    using: scrollProxy,
-                                    animated: false
-                                )
-                            }
-                            .onChange(of: nextEventID) { _, newValue in
-                                scrollToNextEvent(
-                                    newValue,
-                                    using: scrollProxy,
-                                    animated: true
-                                )
-                            }
-                            .onChange(of: todaysEvents.map(\.id)) { _, _ in
-                                scrollToNextEvent(
-                                    nextEventID,
-                                    using: scrollProxy,
-                                    animated: true
-                                )
-                            }
-                        }
+                        eventList(
+                            now: context.date,
+                            nextEventID: nextEventID
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -102,6 +68,60 @@ struct TodayScheduleView: View {
             Spacer()
         }
         .padding(.bottom, 1)
+    }
+
+    // MARK: - Event List
+
+    private func eventList(
+        now: Date,
+        nextEventID: UUID?
+    ) -> some View {
+        ScrollViewReader { scrollProxy in
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(todaysEvents) { event in
+                        let occurrenceDate = occurrenceDateToday(for: event)
+
+                        ScheduleEntryRow(
+                            event: event,
+                            occurrenceDate: occurrenceDate,
+                            isPast: occurrenceDate < now,
+                            isNext: event.id == nextEventID
+                        )
+                        .environmentObject(appState)
+                        .id(event.id)
+
+                        if event.id != todaysEvents.last?.id {
+                            Divider()
+                                .opacity(0.28)
+                                .padding(.leading, 24)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .onAppear {
+                scrollToNextEvent(
+                    nextEventID,
+                    using: scrollProxy,
+                    animated: false
+                )
+            }
+            .onChange(of: nextEventID) { _, newValue in
+                scrollToNextEvent(
+                    newValue,
+                    using: scrollProxy,
+                    animated: true
+                )
+            }
+            .onChange(of: todaysEvents.map(\.id)) { _, _ in
+                scrollToNextEvent(
+                    nextEventID,
+                    using: scrollProxy,
+                    animated: true
+                )
+            }
+        }
     }
 
     // MARK: - Empty State
@@ -147,7 +167,9 @@ struct TodayScheduleView: View {
     private func nextUpcomingEventID(now: Date) -> UUID? {
         todaysEvents
             .filter { occurrenceDateToday(for: $0) >= now }
-            .sorted { occurrenceDateToday(for: $0) < occurrenceDateToday(for: $1) }
+            .sorted {
+                occurrenceDateToday(for: $0) < occurrenceDateToday(for: $1)
+            }
             .first?
             .id
     }
@@ -193,10 +215,9 @@ struct TodayScheduleView: View {
             return event.startDate
         }
 
-        let now = Date()
         let todayComponents = calendar.dateComponents(
             [.year, .month, .day],
-            from: now
+            from: Date()
         )
 
         let timeComponents = calendar.dateComponents(
@@ -237,15 +258,21 @@ struct TodayScheduleView: View {
     }
 }
 
-// MARK: - Row
+// MARK: - Schedule Entry Row
 
 struct ScheduleEntryRow: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Properties
 
     let event: ScheduleEntry
     let occurrenceDate: Date
     let isPast: Bool
     let isNext: Bool
+
+    // MARK: - Derived State
 
     private var action: ActionDefinition? {
         appState.actionDefinitions.first {
@@ -306,6 +333,8 @@ struct ScheduleEntryRow: View {
         return weekdayNames(for: weekdays).joined(separator: ", ")
     }
 
+    // MARK: - Body
+
     var body: some View {
         HStack(spacing: 12) {
             nextIndicator
@@ -333,15 +362,7 @@ struct ScheduleEntryRow: View {
 
             Spacer()
 
-            if isPast {
-                Text("Past")
-                    .font(.caption)
-                    .foregroundStyle(Color.secondary.opacity(0.40))
-            } else if isNext {
-                Text("Next")
-                    .font(.caption)
-                    .foregroundStyle(.blue)
-            }
+            statusLabel
 
             Button("Run") {
                 if let action {
@@ -362,6 +383,8 @@ struct ScheduleEntryRow: View {
         .contentShape(Rectangle())
     }
 
+    // MARK: - Row Pieces
+
     private var nextIndicator: some View {
         Circle()
             .fill(isNext ? Color.blue : Color.clear)
@@ -372,13 +395,37 @@ struct ScheduleEntryRow: View {
         Text(actionTypeText)
             .font(.caption2)
             .bold()
-            .foregroundStyle(action == nil ? secondaryForeground : actionTypeColor.opacity(isPast ? 0.48 : 1.0))
+            .foregroundStyle(
+                action == nil
+                    ? secondaryForeground
+                    : actionTypeColor.opacity(isPast ? 0.48 : 1.0)
+            )
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(
                 Capsule()
-                    .fill(actionTypeColor.opacity(action == nil ? 0.08 : (isPast ? 0.08 : 0.16)))
+                    .fill(
+                        actionTypeColor.opacity(
+                            action == nil
+                                ? 0.08
+                                : (isPast ? 0.08 : 0.16)
+                        )
+                    )
             )
+    }
+
+    private var statusLabel: some View {
+        Group {
+            if isPast {
+                Text("Past")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary.opacity(0.40))
+            } else if isNext {
+                Text("Next")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+            }
+        }
     }
 
     private var rowBackground: some View {
@@ -389,6 +436,8 @@ struct ScheduleEntryRow: View {
                     : (isNext ? Color.blue.opacity(0.055) : Color.clear)
             )
     }
+
+    // MARK: - Weekday Helpers
 
     private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
         if event.repeatWeekdays.isEmpty {
@@ -410,18 +459,25 @@ struct ScheduleEntryRow: View {
         switch weekday {
         case 1:
             return "Sun"
+
         case 2:
             return "Mon"
+
         case 3:
             return "Tue"
+
         case 4:
             return "Wed"
+
         case 5:
             return "Thu"
+
         case 6:
             return "Fri"
+
         case 7:
             return "Sat"
+
         default:
             return "?"
         }

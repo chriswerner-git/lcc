@@ -1,13 +1,20 @@
 //
-//  HelpLCCView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Custom Help window.
+//  File: HelpLCCView.swift
+//  Purpose: Baseline operating instructions and app help window.
+//
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
 struct HelpLCCView: View {
+    // MARK: - Body
+
     var body: some View {
         ZStack {
             background

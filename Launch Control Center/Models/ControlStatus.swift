@@ -1,10 +1,13 @@
 //
-//  ControlStatus.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Represents the high-level runtime status shown in the dashboard.
-//  This is not the same as whether the schedule is enabled.
-//  It describes what the app/control layer is currently doing.
+//  File: ControlStatus.swift
+//  Purpose: Represents the high-level runtime status shown by the app.
+//
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation

@@ -1,33 +1,35 @@
 //
-//  ActionEditorView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Edits a single Action.
+//  File: ActionEditorView.swift
+//  Purpose: Edits reusable Show and Utility Actions.
 //
-//  Show Actions contain UDP Steps.
-//  Utility Actions contain dashboard-level Utility Steps.
-//
-//  Utility Actions can:
-//  - set volume
-//  - enable / disable scheduled Show Actions
-//  - enable / disable scheduled Utility Actions
-//  - run another Action manually
-//  - send UDP commands
-//
-//  Manual controls in this view are intentionally independent from
-//  Show / Utility schedule enable toggles.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
 struct ActionEditorView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Properties
 
     let actionID: UUID
 
+    // MARK: - Derived State
+
     private var actionIndex: Int? {
-        appState.actionDefinitions.firstIndex { $0.id == actionID }
+        appState.actionDefinitions.firstIndex {
+            $0.id == actionID
+        }
     }
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -36,7 +38,6 @@ struct ActionEditorView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let index = actionIndex {
                     editorHeader(index: index)
-
                     actionDetailsCard(index: index)
 
                     switch appState.actionDefinitions[index].type {
@@ -53,20 +54,6 @@ struct ActionEditorView: View {
             .padding(20)
         }
         .frame(minWidth: 800, minHeight: 760)
-    }
-
-    // MARK: - Background
-
-    private var editorBackground: some View {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
     }
 
     // MARK: - Header
@@ -130,8 +117,11 @@ struct ActionEditorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    TextField("Action Name", text: $appState.actionDefinitions[index].name)
-                        .textFieldStyle(.roundedBorder)
+                    TextField(
+                        "Action Name",
+                        text: $appState.actionDefinitions[index].name
+                    )
+                    .textFieldStyle(.roundedBorder)
                 }
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -139,7 +129,10 @@ struct ActionEditorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Picker("", selection: $appState.actionDefinitions[index].type) {
+                    Picker(
+                        "",
+                        selection: $appState.actionDefinitions[index].type
+                    ) {
                         ForEach(ActionType.allCases) { type in
                             Text(type.rawValue).tag(type)
                         }
@@ -198,7 +191,9 @@ struct ActionEditorView: View {
             subtitle: "\(appState.actionDefinitions[index].commands.count) configured",
             addButtonTitle: "Add UDP Step",
             addSystemImage: "plus",
-            addAction: { addUDPStep(to: index) }
+            addAction: {
+                addUDPStep(to: index)
+            }
         ) {
             if appState.actionDefinitions[index].commands.isEmpty {
                 emptyStepsView(
@@ -207,7 +202,10 @@ struct ActionEditorView: View {
                     message: "Add a UDP Step to send commands when this Show Action runs."
                 )
             } else {
-                ForEach(Array($appState.actionDefinitions[index].commands.enumerated()), id: \.element.id) { stepIndex, $command in
+                ForEach(
+                    Array($appState.actionDefinitions[index].commands.enumerated()),
+                    id: \.element.id
+                ) { stepIndex, $command in
                     udpStepCard(
                         actionIndex: index,
                         stepIndex: stepIndex,
@@ -272,10 +270,16 @@ struct ActionEditorView: View {
                 moveUpDisabled: stepIndex == 0,
                 moveDownDisabled: stepIndex == appState.actionDefinitions[actionIndex].commands.count - 1,
                 moveUp: {
-                    moveUDPStepUp(actionIndex: actionIndex, stepIndex: stepIndex)
+                    moveUDPStepUp(
+                        actionIndex: actionIndex,
+                        stepIndex: stepIndex
+                    )
                 },
                 moveDown: {
-                    moveUDPStepDown(actionIndex: actionIndex, stepIndex: stepIndex)
+                    moveUDPStepDown(
+                        actionIndex: actionIndex,
+                        stepIndex: stepIndex
+                    )
                 },
                 delete: {
                     deleteUDPStep(
@@ -299,7 +303,9 @@ struct ActionEditorView: View {
             subtitle: "\(appState.actionDefinitions[index].utilityCommands.count) configured",
             addButtonTitle: "Add Utility Step",
             addSystemImage: "plus",
-            addAction: { addUtilityStep(to: index) }
+            addAction: {
+                addUtilityStep(to: index)
+            }
         ) {
             if appState.actionDefinitions[index].utilityCommands.isEmpty {
                 emptyStepsView(
@@ -308,7 +314,10 @@ struct ActionEditorView: View {
                     message: "Add a Utility Step to control Dashboard functions or run another Action."
                 )
             } else {
-                ForEach(Array($appState.actionDefinitions[index].utilityCommands.enumerated()), id: \.element.id) { stepIndex, $command in
+                ForEach(
+                    Array($appState.actionDefinitions[index].utilityCommands.enumerated()),
+                    id: \.element.id
+                ) { stepIndex, $command in
                     utilityStepCard(
                         actionIndex: index,
                         stepIndex: stepIndex,
@@ -353,10 +362,16 @@ struct ActionEditorView: View {
                 moveUpDisabled: stepIndex == 0,
                 moveDownDisabled: stepIndex == appState.actionDefinitions[actionIndex].utilityCommands.count - 1,
                 moveUp: {
-                    moveUtilityStepUp(actionIndex: actionIndex, stepIndex: stepIndex)
+                    moveUtilityStepUp(
+                        actionIndex: actionIndex,
+                        stepIndex: stepIndex
+                    )
                 },
                 moveDown: {
-                    moveUtilityStepDown(actionIndex: actionIndex, stepIndex: stepIndex)
+                    moveUtilityStepDown(
+                        actionIndex: actionIndex,
+                        stepIndex: stepIndex
+                    )
                 },
                 delete: {
                     deleteUtilityStep(
@@ -520,11 +535,20 @@ struct ActionEditorView: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(isSelected ? Color.blue.opacity(0.25) : Color(nsColor: .textBackgroundColor).opacity(0.18))
+                .fill(
+                    isSelected
+                        ? Color.blue.opacity(0.25)
+                        : Color(nsColor: .textBackgroundColor).opacity(0.18)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(isSelected ? Color.blue.opacity(0.5) : Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(
+                    isSelected
+                        ? Color.blue.opacity(0.5)
+                        : Color.white.opacity(0.08),
+                    lineWidth: 1
+                )
         )
         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
@@ -598,8 +622,12 @@ struct ActionEditorView: View {
         let parentActionID = appState.actionDefinitions[parentActionIndex].id
 
         return appState.actionDefinitions
-            .filter { $0.id != parentActionID }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .filter {
+                $0.id != parentActionID
+            }
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
     }
 
     // MARK: - Steps Shell
@@ -850,6 +878,18 @@ struct ActionEditorView: View {
 
     // MARK: - Styling
 
+    private var editorBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(nsColor: .windowBackgroundColor),
+                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
     private var editorCardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
@@ -894,11 +934,15 @@ struct ActionEditorView: View {
     private func deleteUDPStep(commandID: UUID, actionIndex: Int) {
         appState.actionDefinitions[actionIndex]
             .commands
-            .removeAll { $0.id == commandID }
+            .removeAll {
+                $0.id == commandID
+            }
     }
 
     private func moveUDPStepUp(actionIndex: Int, stepIndex: Int) {
-        guard stepIndex > 0 else { return }
+        guard stepIndex > 0 else {
+            return
+        }
 
         appState.actionDefinitions[actionIndex]
             .commands
@@ -908,7 +952,9 @@ struct ActionEditorView: View {
     private func moveUDPStepDown(actionIndex: Int, stepIndex: Int) {
         let lastIndex = appState.actionDefinitions[actionIndex].commands.count - 1
 
-        guard stepIndex < lastIndex else { return }
+        guard stepIndex < lastIndex else {
+            return
+        }
 
         appState.actionDefinitions[actionIndex]
             .commands
@@ -932,11 +978,15 @@ struct ActionEditorView: View {
     private func deleteUtilityStep(commandID: UUID, actionIndex: Int) {
         appState.actionDefinitions[actionIndex]
             .utilityCommands
-            .removeAll { $0.id == commandID }
+            .removeAll {
+                $0.id == commandID
+            }
     }
 
     private func moveUtilityStepUp(actionIndex: Int, stepIndex: Int) {
-        guard stepIndex > 0 else { return }
+        guard stepIndex > 0 else {
+            return
+        }
 
         appState.actionDefinitions[actionIndex]
             .utilityCommands
@@ -946,11 +996,12 @@ struct ActionEditorView: View {
     private func moveUtilityStepDown(actionIndex: Int, stepIndex: Int) {
         let lastIndex = appState.actionDefinitions[actionIndex].utilityCommands.count - 1
 
-        guard stepIndex < lastIndex else { return }
+        guard stepIndex < lastIndex else {
+            return
+        }
 
         appState.actionDefinitions[actionIndex]
             .utilityCommands
             .swapAt(stepIndex, stepIndex + 1)
     }
 }
-

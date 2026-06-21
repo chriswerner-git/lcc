@@ -1,17 +1,26 @@
 //
-//  AboutLCCView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Custom About window.
+//  File: AboutLCCView.swift
+//  Purpose: Custom About window with app metadata, support links, and notices.
+//
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import AppKit
 import SwiftUI
 
 struct AboutLaunchControlCenterView: View {
+    // MARK: - Constants
+
     private let supportEmail = "missioncontrol@lunartelephone.com"
     private let websiteDisplayText = "www.lunartelephone.com"
     private let websiteURLString = "https://www.lunartelephone.com"
+
+    // MARK: - App Metadata
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
@@ -26,19 +35,17 @@ struct AboutLaunchControlCenterView: View {
         return "\(year)"
     }
 
+    // MARK: - Body
+
     var body: some View {
         ZStack {
             background
 
             VStack(alignment: .leading, spacing: 18) {
                 header
-
                 appInfoCard
-
                 contactCard
-
                 disclaimerCard
-
                 licenseCard
             }
             .padding(22)
@@ -225,7 +232,7 @@ struct AboutLaunchControlCenterView: View {
         NSWorkspace.shared.open(url)
     }
 
-    // MARK: - Text
+    // MARK: - Notice Text
 
     private var disclaimerText: String {
         """

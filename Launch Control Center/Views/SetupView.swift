@@ -1,12 +1,13 @@
 //
-//  SetupView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Project setup interface.
+//  File: SetupView.swift
+//  Purpose: App preferences, project settings, volume presets, and backups.
 //
-//  This is where operators configure app-wide and project-wide settings.
-//  Users should not need to edit Xcode project files or source code
-//  to configure a show.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import AppKit
@@ -14,10 +15,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SetupView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - State
 
     @State private var selectedCategory: SetupCategory = .appPreferences
     @State private var configurationStatus: String = "No configuration import/export yet."
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -351,6 +358,8 @@ struct SetupView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    // MARK: - Volume UDP Output
+
     private var volumeUDPOutputCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
@@ -463,6 +472,8 @@ struct SetupView: View {
 
         return String(roundedValue)
     }
+
+    // MARK: - Volume Presets
 
     private var volumePresetsCard: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -604,6 +615,8 @@ struct SetupView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    // MARK: - Export
+
     private func exportConfiguration() {
         let panel = NSSavePanel()
         panel.title = "Export Launch Control Configuration"
@@ -629,6 +642,8 @@ struct SetupView: View {
             configurationStatus = "Export failed: \(error.localizedDescription)"
         }
     }
+
+    // MARK: - Import
 
     private func importConfiguration() {
         let openPanel = NSOpenPanel()
@@ -658,6 +673,8 @@ struct SetupView: View {
             configurationStatus = "Import failed: \(error.localizedDescription)"
         }
     }
+
+    // MARK: - Configuration File Helpers
 
     private var launchControlFileType: UTType {
         UTType(filenameExtension: "launchcontrol") ?? .json
@@ -781,6 +798,8 @@ struct SetupView: View {
             Spacer()
         }
     }
+
+    // MARK: - Styling
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)

@@ -1,17 +1,23 @@
 //
-//  TestingView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  UDP testing and diagnostics.
+//  File: TestingView.swift
+//  Purpose: UDP testing and diagnostics window.
 //
-//  This window is for confirming that UDP send / receive behavior is working.
-//  It is intentionally independent from scheduled Events and Actions.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
 struct TestingView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Body
 
     var body: some View {
         TestingContentView(
@@ -21,11 +27,19 @@ struct TestingView: View {
     }
 }
 
+// MARK: - Testing Content
+
 private struct TestingContentView: View {
+    // MARK: - Observed Objects
+
     @ObservedObject var appState: AppState
     @ObservedObject var udpService: UDPService
 
+    // MARK: - State
+
     @State private var testMessage: String = "Hello from Launch Control Center"
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -33,11 +47,8 @@ private struct TestingContentView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 header
-
                 listenerCard
-
                 sendCard
-
                 statusCards
 
                 Spacer(minLength: 0)
@@ -45,20 +56,6 @@ private struct TestingContentView: View {
             .padding(16)
         }
         .frame(width: 660, height: 640)
-    }
-
-    // MARK: - Background
-
-    private var background: some View {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
     }
 
     // MARK: - Header
@@ -180,6 +177,8 @@ private struct TestingContentView: View {
         .background(insetPanelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+
+    // MARK: - Listener State
 
     private var listenerStatusColor: Color {
         switch udpService.listenerState {
@@ -443,6 +442,20 @@ private struct TestingContentView: View {
 
             Spacer()
         }
+    }
+
+    // MARK: - Styling
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(nsColor: .windowBackgroundColor),
+                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
     }
 
     private var cardBackground: some View {

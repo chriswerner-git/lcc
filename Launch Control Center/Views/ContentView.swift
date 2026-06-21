@@ -1,27 +1,29 @@
 //
-//  ContentView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Main dashboard view.
+//  File: ContentView.swift
+//  Purpose: Main Dashboard shell and manual Action trigger layout.
 //
-//  This is the operator's primary interface.
-//  It provides:
-//  - Current clock
-//  - Manual Action trigger buttons
-//  - Schedule enable / disable
-//  - Volume control
-//  - Next / Last Event summary
-//  - Today's scheduled Events
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import AppKit
 import SwiftUI
 
 struct ContentView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Layout Constants
 
     private let outerPadding: CGFloat = 18
     private let sectionSpacing: CGFloat = 18
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -60,6 +62,8 @@ struct ContentView: View {
         .background(DashboardWindowConfigurator())
     }
 
+    // MARK: - Styling
+
     private var dashboardBackground: some View {
         LinearGradient(
             colors: [
@@ -83,7 +87,11 @@ struct ContentView: View {
 // MARK: - Manual Action Buttons
 
 private struct ManualActionButtonsView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Layout Constants
 
     private let buttonMinimumWidth: CGFloat = 156
     private let buttonHeight: CGFloat = 32
@@ -92,17 +100,25 @@ private struct ManualActionButtonsView: View {
     private let cardHeaderHeight: CGFloat = 24
     private let maximumColumnHeight: CGFloat = 245
 
+    // MARK: - Filtered Actions
+
     private var showActions: [ActionDefinition] {
         appState.actionDefinitions
             .filter { $0.type == .show }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
     }
 
     private var utilityActions: [ActionDefinition] {
         appState.actionDefinitions
             .filter { $0.type == .utility }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
     }
+
+    // MARK: - Body
 
     var body: some View {
         GeometryReader { geometry in
@@ -148,6 +164,8 @@ private struct ManualActionButtonsView: View {
         .frame(height: manualSectionHeight)
     }
 
+    // MARK: - Section Layout
+
     private var manualSectionHeight: CGFloat {
         let assumedDashboardWidth: CGFloat = 900
         let columnWidth = max((assumedDashboardWidth - 36 - 14) / 2, 320)
@@ -188,6 +206,8 @@ private struct ManualActionButtonsView: View {
         .padding(.bottom, 1)
     }
 
+    // MARK: - Action Columns
+
     private func actionColumn(
         title: String,
         subtitle: String,
@@ -214,7 +234,10 @@ private struct ManualActionButtonsView: View {
                 ScrollView(.vertical) {
                     LazyVGrid(
                         columns: [
-                            GridItem(.adaptive(minimum: buttonMinimumWidth), spacing: buttonSpacing)
+                            GridItem(
+                                .adaptive(minimum: buttonMinimumWidth),
+                                spacing: buttonSpacing
+                            )
                         ],
                         alignment: .leading,
                         spacing: buttonSpacing
@@ -242,6 +265,8 @@ private struct ManualActionButtonsView: View {
         .overlay(cardBorder)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
+
+    // MARK: - Action Buttons
 
     private func manualActionButton(_ action: ActionDefinition) -> some View {
         Button {
@@ -282,6 +307,8 @@ private struct ManualActionButtonsView: View {
             )
     }
 
+    // MARK: - Layout Helpers
+
     private func columnHeight(
         actionCount: Int,
         columnWidth: CGFloat
@@ -314,6 +341,8 @@ private struct ManualActionButtonsView: View {
             + cardPadding
     }
 
+    // MARK: - Styling
+
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
@@ -341,6 +370,8 @@ private struct ManualActionButtonsView: View {
 // MARK: - Window Configuration
 
 private struct DashboardWindowConfigurator: NSViewRepresentable {
+    // MARK: - NSViewRepresentable
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
 
@@ -356,6 +387,8 @@ private struct DashboardWindowConfigurator: NSViewRepresentable {
             configureWindow(from: nsView)
         }
     }
+
+    // MARK: - Window Sizing
 
     private func configureWindow(from view: NSView) {
         guard let window = view.window else {

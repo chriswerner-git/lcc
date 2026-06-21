@@ -1,34 +1,44 @@
 //
-//  ActionDefinition.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Defines a reusable Action.
+//  File: ActionDefinition.swift
+//  Purpose: Defines reusable Show and Utility Actions.
 //
-//  Show Actions execute UDP commands.
-//  Utility Actions execute dashboard-level Utility commands.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation
 
 struct ActionDefinition: Identifiable, Codable {
+    // MARK: - Identity
+
     var id: UUID = UUID()
 
-    // User-facing action name, such as "Show 1" or "Server Reset".
+    // MARK: - Basic Info
+
+    // Operator-facing Action name, such as "Show 1" or "Server Reset".
     var name: String
 
-    // Optional user notes for documenting intent, context, warnings, etc.
+    // Optional notes documenting intent, context, warnings, or handoff details.
     var notes: String
 
-    // Action category.
+    // Primary Action category.
     var type: ActionType
 
-    // Show Action steps.
-    // These are UDP commands executed in sequence.
+    // MARK: - Show Action Steps
+
+    // UDP commands executed in sequence when this is a Show Action.
     var commands: [UDPCommand] = []
 
-    // Utility Action steps.
-    // These perform dashboard-level operations.
+    // MARK: - Utility Action Steps
+
+    // App-level operations executed in sequence when this is a Utility Action.
     var utilityCommands: [UtilityCommand] = []
+
+    // MARK: - Init
 
     init(
         id: UUID = UUID(),

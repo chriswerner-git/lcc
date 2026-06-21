@@ -1,26 +1,25 @@
 //
-//  MenuBarView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Menu bar interface.
+//  File: MenuBarView.swift
+//  Purpose: Menu bar interface for quick app navigation and status.
 //
-//  Provides quick access to:
-//  - Dashboard
-//  - Schedule
-//  - Define Actions
-//  - Add Events
-//  - UDP Tests
-//  - Preferences
-//  - About
-//  - Quit
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import AppKit
 import SwiftUI
 
 struct MenuBarView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+
+    // MARK: - Body
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -32,7 +31,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            aboutSection
+            helpSection
 
             Divider()
 
@@ -41,6 +40,8 @@ struct MenuBarView: View {
         .padding()
         .frame(width: 270)
     }
+
+    // MARK: - Header
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -66,6 +67,8 @@ struct MenuBarView: View {
             return "Schedule Disabled"
         }
     }
+
+    // MARK: - Navigation
 
     private var navigationSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -107,16 +110,25 @@ struct MenuBarView: View {
         }
     }
 
-    private var aboutSection: some View {
+    // MARK: - Help / About
+
+    private var helpSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                openWindow(id: "about-lcc-window")
-            } label: {
-                Label("About LCC", systemImage: "info.circle")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            menuButton(
+                title: "Help",
+                systemImage: "questionmark.circle",
+                windowID: "help-lcc-window"
+            )
+
+            menuButton(
+                title: "About LCC",
+                systemImage: "info.circle",
+                windowID: "about-lcc-window"
+            )
         }
     }
+
+    // MARK: - System
 
     private var systemSection: some View {
         Button {
@@ -126,6 +138,8 @@ struct MenuBarView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    // MARK: - Helpers
 
     private func menuButton(
         title: String,

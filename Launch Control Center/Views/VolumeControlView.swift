@@ -1,17 +1,23 @@
 //
-//  VolumeControlView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Dashboard volume control.
+//  File: VolumeControlView.swift
+//  Purpose: Dashboard playback volume control and preset buttons.
 //
-//  The slider stores its value persistently through AppState.
-//  Changes send a UDP message using the current project defaults.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
 struct VolumeControlView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Derived State
 
     private var volumePercent: Int {
         Int(appState.volumeLevel * 100)
@@ -25,6 +31,8 @@ struct VolumeControlView: View {
         appState.isMuted ? .secondary : .blue
     }
 
+    // MARK: - Body
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader
@@ -34,8 +42,12 @@ struct VolumeControlView: View {
 
                 Slider(
                     value: Binding(
-                        get: { appState.volumeLevel },
-                        set: { appState.setVolume($0) }
+                        get: {
+                            appState.volumeLevel
+                        },
+                        set: { newValue in
+                            appState.setVolume(newValue)
+                        }
                     ),
                     in: 0...1
                 )
@@ -123,6 +135,8 @@ struct VolumeControlView: View {
         }
     }
 
+    // MARK: - Buttons
+
     private func volumeButton(
         title: String,
         systemImage: String,
@@ -178,11 +192,20 @@ struct VolumeControlView: View {
 
     private func buttonBackground(isProminent: Bool) -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(isProminent ? Color.blue.opacity(0.26) : Color(nsColor: .textBackgroundColor).opacity(0.18))
+            .fill(
+                isProminent
+                    ? Color.blue.opacity(0.26)
+                    : Color(nsColor: .textBackgroundColor).opacity(0.18)
+            )
     }
 
     private func buttonBorder(isProminent: Bool) -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(isProminent ? Color.blue.opacity(0.45) : Color.white.opacity(0.10), lineWidth: 1)
+            .strokeBorder(
+                isProminent
+                    ? Color.blue.opacity(0.45)
+                    : Color.white.opacity(0.10),
+                lineWidth: 1
+            )
     }
 }

@@ -1,49 +1,44 @@
 //
-//  ScheduleEngine.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Lightweight repeating timer used by AppState to check scheduled Events.
+//  File: ScheduledEvent.swift
+//  Purpose: Legacy scheduled Event model retained for compatibility.
 //
-//  The engine does not decide what should run.
-//  It simply provides a reliable heartbeat.
-//
-//  Schedule logic lives in AppState so it can access:
-//  - saved schedule entries
-//  - saved action definitions
-//  - Show / Utility enable toggles
-//  - dashboard status state
-//
-//
-//
-//  Legacy schedule model.
-//  This is being replaced by ScheduleEntry, where Events reference Actions.
-//  Keep this file temporarily until all existing views have been migrated.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation
 
 struct ScheduledEvent: Identifiable, Codable {
-    // Stable ID for this legacy scheduled item.
+    // MARK: - Legacy Notice
+
+    // This model has been superseded by ScheduleEntry, where Events reference
+    // ActionDefinition records instead of storing command data directly.
+    //
+    // Keep this model while older saved data may still exist.
+
+    // MARK: - Identity
+
     var id: UUID = UUID()
 
-    // User-facing event name.
-    var title: String
+    // MARK: - Basic Info
 
-    // Legacy type value.
-    // Eventually this should come from the referenced ActionDefinition.
+    var title: String
     var type: ActionType
 
-    // Date and time when this legacy event should run.
+    // MARK: - Timing
+
     var startDate: Date
-
-    // Whether this individual legacy event is enabled.
     var enabled: Bool = true
-
-    // Basic daily repeat support.
     var repeatsDaily: Bool = false
     var repeatUntil: Date?
 
-    // Legacy single UDP message.
-    // Eventually this should be replaced by ActionDefinition.commands.
+    // MARK: - Legacy Command Data
+
+    // Older Events stored a single UDP message directly on the Event.
+    // Newer Events should trigger an ActionDefinition instead.
     var commandMessage: String
 }

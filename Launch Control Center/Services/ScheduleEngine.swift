@@ -1,20 +1,13 @@
 //
-//  ScheduleEngine.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Lightweight repeating timer used by AppState to check scheduled Events.
+//  File: ScheduleEngine.swift
+//  Purpose: Provides the heartbeat used to check scheduled Events.
 //
-//  The engine does not decide what should run.
-//  It simply provides a reliable heartbeat.
-//
-//  Schedule logic lives in AppState so it can access:
-//  - saved schedule entries
-//  - saved action definitions
-//  - Show / Utility enable toggles
-//  - dashboard status state
-//
-//
-//  Lightweight repeating timer used by AppState to check scheduled Events.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation
@@ -28,14 +21,12 @@ final class ScheduleEngine {
     ) {
         stop()
 
-        let newTimer = Timer.scheduledTimer(
+        timer = Timer.scheduledTimer(
             withTimeInterval: interval,
             repeats: true
         ) { _ in
             handler()
         }
-
-        timer = newTimer
     }
 
     func stop() {

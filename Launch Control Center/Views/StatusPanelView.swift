@@ -1,41 +1,26 @@
 //
-//  StatusPanelView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Dashboard status display.
+//  File: StatusPanelView.swift
+//  Purpose: Dashboard clock, schedule status, and Event summary panels.
 //
-//  Shows:
-//  - Current date/time
-//  - Show / Utility schedule status
-//  - Next allowed Event
-//  - Last Event
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
-// MARK: - Clock
+// MARK: - Dashboard Clock
 
 struct DashboardClockView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
 
-    private func dayOfWeek(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE"
-        return formatter.string(from: date)
-    }
-
-    private func calendarDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMMM yyyy"
-        return formatter.string(from: date)
-    }
-
-    private func clockTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = appState.use24HourTime ? "HH:mm:ss" : "h:mm:ss a"
-        return formatter.string(from: date)
-    }
+    // MARK: - Derived Time Metadata
 
     private var timeZoneText: String {
         TimeZone.current.identifier
@@ -55,24 +40,12 @@ struct DashboardClockView: View {
         return String(format: "UTC %@%d:%02d", sign, hours, minutes)
     }
 
+    // MARK: - Body
+
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { context in
             ZStack(alignment: .bottomTrailing) {
-                VStack(spacing: 4) {
-                    Text(appState.projectName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-
-                    Text(clockTime(context.date))
-                        .font(.system(size: 42, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-
-                    Text("\(dayOfWeek(context.date)), \(calendarDate(context.date))")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
+                clockDisplay(for: context.date)
 
                 aboutButton
                     .frame(
@@ -81,7 +54,9 @@ struct DashboardClockView: View {
                         alignment: .bottomLeading
                     )
 
-                clockMetadata(status: timeDataStatus(for: context.date))
+                clockMetadata(
+                    status: timeDataStatus(for: context.date)
+                )
             }
             .padding(.vertical, 18)
             .padding(.horizontal, 16)
@@ -89,6 +64,26 @@ struct DashboardClockView: View {
             .overlay(dashboardCardBorder)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
+    }
+
+    // MARK: - Clock Display
+
+    private func clockDisplay(for date: Date) -> some View {
+        VStack(spacing: 4) {
+            Text(appState.projectName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Text(clockTime(date))
+                .font(.system(size: 42, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+
+            Text("\(dayOfWeek(date)), \(calendarDate(date))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var aboutButton: some View {
@@ -103,19 +98,7 @@ struct DashboardClockView: View {
         .help("About Launch Control Center")
     }
 
-    private func timeDataStatus(for timelineDate: Date) -> ClockDataStatus {
-        let age = abs(Date().timeIntervalSince(timelineDate))
-
-        if age <= 3 {
-            return .fresh
-        }
-
-        if age <= 30 {
-            return .stale
-        }
-
-        return .missing
-    }
+    // MARK: - Clock Metadata
 
     private func clockMetadata(status: ClockDataStatus) -> some View {
         VStack(alignment: .trailing, spacing: 3) {
@@ -148,7 +131,43 @@ struct DashboardClockView: View {
         .padding(.bottom, 2)
         .help("This indicates the Dashboard clock is updating from the local system clock. It does not yet verify an external NTP server.")
     }
+
+    private func timeDataStatus(for timelineDate: Date) -> ClockDataStatus {
+        let age = abs(Date().timeIntervalSince(timelineDate))
+
+        if age <= 3 {
+            return .fresh
+        }
+
+        if age <= 30 {
+            return .stale
+        }
+
+        return .missing
+    }
+
+    // MARK: - Date Formatting
+
+    private func dayOfWeek(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date)
+    }
+
+    private func calendarDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMMM yyyy"
+        return formatter.string(from: date)
+    }
+
+    private func clockTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = appState.use24HourTime ? "HH:mm:ss" : "h:mm:ss a"
+        return formatter.string(from: date)
+    }
 }
+
+// MARK: - Clock Data Status
 
 private enum ClockDataStatus {
     case fresh
@@ -185,7 +204,11 @@ private enum ClockDataStatus {
 // MARK: - Schedule Status
 
 struct ScheduleStatusView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Body
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -209,6 +232,8 @@ struct ScheduleStatusView: View {
         }
     }
 
+    // MARK: - Header
+
     private var sectionHeader: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Schedule")
@@ -223,6 +248,8 @@ struct ScheduleStatusView: View {
         }
         .padding(.bottom, 1)
     }
+
+    // MARK: - Toggle Cards
 
     private func scheduleToggleCard(
         title: String,
@@ -253,8 +280,12 @@ struct ScheduleStatusView: View {
             Toggle(
                 "",
                 isOn: Binding(
-                    get: { isEnabled },
-                    set: { setEnabled($0) }
+                    get: {
+                        isEnabled
+                    },
+                    set: { newValue in
+                        setEnabled(newValue)
+                    }
                 )
             )
             .labelsHidden()
@@ -277,33 +308,15 @@ struct ScheduleStatusView: View {
 // MARK: - Event Summary
 
 struct EventSummaryView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
+
+    // MARK: - Layout Constants
 
     private let eventCardHeight: CGFloat = 86
 
-    private func nextEvent(from now: Date) -> (event: ScheduleEntry, action: ActionDefinition, occurrenceDate: Date)? {
-        appState.scheduleEntries
-            .filter { $0.enabled }
-            .compactMap { event -> (ScheduleEntry, ActionDefinition, Date)? in
-                guard let action = appState.actionDefinitions.first(where: {
-                    $0.id == event.actionDefinitionID
-                }) else {
-                    return nil
-                }
-
-                guard eventIsAllowed(action) else {
-                    return nil
-                }
-
-                guard let occurrenceDate = nextOccurrenceDate(for: event, from: now) else {
-                    return nil
-                }
-
-                return (event, action, occurrenceDate)
-            }
-            .sorted { $0.2 < $1.2 }
-            .first
-    }
+    // MARK: - Body
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { context in
@@ -323,6 +336,8 @@ struct EventSummaryView: View {
         }
     }
 
+    // MARK: - Header
+
     private var sectionHeader: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Events")
@@ -336,6 +351,8 @@ struct EventSummaryView: View {
         }
         .padding(.bottom, 1)
     }
+
+    // MARK: - Cards
 
     private func eventCardContainer<Content: View>(
         @ViewBuilder content: () -> Content
@@ -408,6 +425,35 @@ struct EventSummaryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
+    // MARK: - Event Selection
+
+    private func nextEvent(from now: Date) -> (event: ScheduleEntry, action: ActionDefinition, occurrenceDate: Date)? {
+        appState.scheduleEntries
+            .filter { $0.enabled }
+            .compactMap { event -> (ScheduleEntry, ActionDefinition, Date)? in
+                guard let action = appState.actionDefinitions.first(where: {
+                    $0.id == event.actionDefinitionID
+                }) else {
+                    return nil
+                }
+
+                guard eventIsAllowed(action) else {
+                    return nil
+                }
+
+                guard let occurrenceDate = nextOccurrenceDate(
+                    for: event,
+                    from: now
+                ) else {
+                    return nil
+                }
+
+                return (event, action, occurrenceDate)
+            }
+            .sorted { $0.2 < $1.2 }
+            .first
+    }
+
     private func eventIsAllowed(_ action: ActionDefinition) -> Bool {
         switch action.type {
         case .show:
@@ -417,6 +463,8 @@ struct EventSummaryView: View {
             return appState.utilityActionsEnabled
         }
     }
+
+    // MARK: - Occurrence Calculation
 
     private func nextOccurrenceDate(
         for event: ScheduleEntry,
@@ -455,7 +503,10 @@ struct EventSummaryView: View {
                 continue
             }
 
-            let candidateWeekday = calendar.component(.weekday, from: candidateDay)
+            let candidateWeekday = calendar.component(
+                .weekday,
+                from: candidateDay
+            )
 
             guard selectedWeekdays.contains(candidateWeekday) else {
                 continue
@@ -520,6 +571,8 @@ struct EventSummaryView: View {
         } == false
     }
 
+    // MARK: - Event Text Formatting
+
     private func repeatSummary(for event: ScheduleEntry) -> String {
         guard event.repeatsDaily else {
             return "One-time"
@@ -555,18 +608,25 @@ struct EventSummaryView: View {
         switch weekday {
         case 1:
             return "Sun"
+
         case 2:
             return "Mon"
+
         case 3:
             return "Tue"
+
         case 4:
             return "Wed"
+
         case 5:
             return "Thu"
+
         case 6:
             return "Fri"
+
         case 7:
             return "Sat"
+
         default:
             return "?"
         }
@@ -585,9 +645,9 @@ struct EventSummaryView: View {
     private func countdown(to date: Date, from now: Date) -> String {
         let interval = max(Int(date.timeIntervalSince(now)), 0)
 
-        let days = interval / 86400
-        let hours = (interval % 86400) / 3600
-        let minutes = (interval % 3600) / 60
+        let days = interval / 86_400
+        let hours = (interval % 86_400) / 3_600
+        let minutes = (interval % 3_600) / 60
         let seconds = interval % 60
 
         if days > 0 {

@@ -1,37 +1,54 @@
 //
-//  ActionsView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Lists reusable Actions.
-//  Actions are grouped by type and sorted alphabetically.
+//  File: ActionsView.swift
+//  Purpose: Lists reusable Show and Utility Actions for editing.
 //
-//  Show Actions contain UDP Steps.
-//  Utility Actions contain dashboard-level Utility Steps.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
 struct ActionsView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
 
+    // MARK: - State
+
     @State private var selectedActionID: UUID?
+
+    // MARK: - Filtered Actions
 
     private var showActions: [ActionDefinition] {
         appState.actionDefinitions
             .filter { $0.type == .show }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
     }
 
     private var utilityActions: [ActionDefinition] {
         appState.actionDefinitions
             .filter { $0.type == .utility }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
     }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 420)
+                .navigationSplitViewColumnWidth(
+                    min: 300,
+                    ideal: 340,
+                    max: 420
+                )
         } detail: {
             detailView
         }
@@ -46,25 +63,11 @@ struct ActionsView: View {
 
             VStack(alignment: .leading, spacing: 16) {
                 header
-
                 createButtons
-
                 actionList
             }
             .padding(18)
         }
-    }
-
-    private var sidebarBackground: some View {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.65)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
     }
 
     private var header: some View {
@@ -98,6 +101,8 @@ struct ActionsView: View {
             .buttonStyle(.bordered)
         }
     }
+
+    // MARK: - Action List
 
     private var actionList: some View {
         ScrollView(.vertical) {
@@ -150,22 +155,6 @@ struct ActionsView: View {
         }
     }
 
-    private func emptyState(_ message: String) -> some View {
-        Text(message)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 54, alignment: .center)
-            .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-            )
-    }
-
     private func actionRow(_ action: ActionDefinition) -> some View {
         Button {
             selectedActionID = action.id
@@ -207,68 +196,18 @@ struct ActionsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(rowBackground(isSelected: selectedActionID == action.id))
-        .overlay(rowBorder(isSelected: selectedActionID == action.id))
+        .background(
+            rowBackground(isSelected: selectedActionID == action.id)
+        )
+        .overlay(
+            rowBorder(isSelected: selectedActionID == action.id)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
             Button("Delete Action", role: .destructive) {
                 deleteAction(action)
             }
         }
-    }
-
-    private func actionIcon(for action: ActionDefinition) -> some View {
-        ZStack {
-            Circle()
-                .fill(actionColor(for: action).opacity(0.18))
-                .frame(width: 32, height: 32)
-
-            Image(systemName: action.type == .show ? "play.fill" : "bolt.fill")
-                .font(.caption)
-                .foregroundStyle(actionColor(for: action))
-        }
-    }
-
-    private func rowBackground(isSelected: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(
-                isSelected
-                    ? Color.accentColor.opacity(0.22)
-                    : Color(nsColor: .controlBackgroundColor).opacity(0.62)
-            )
-    }
-
-    private func rowBorder(isSelected: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .strokeBorder(
-                isSelected ? Color.accentColor.opacity(0.45) : Color.white.opacity(0.08),
-                lineWidth: 1
-            )
-    }
-
-    private func actionColor(for action: ActionDefinition) -> Color {
-        switch action.type {
-        case .show:
-            return .blue
-
-        case .utility:
-            return .purple
-        }
-    }
-
-    private func stepCountText(for action: ActionDefinition) -> String {
-        switch action.type {
-        case .show:
-            return "\(action.commands.count) UDP step\(action.commands.count == 1 ? "" : "s")"
-
-        case .utility:
-            return "\(action.utilityCommands.count) utility step\(action.utilityCommands.count == 1 ? "" : "s")"
-        }
-    }
-
-    private func usageText(for action: ActionDefinition) -> String {
-        let count = eventUsageCount(for: action)
-        return "Used by \(count) Event\(count == 1 ? "" : "s")"
     }
 
     // MARK: - Detail
@@ -303,14 +242,7 @@ struct ActionsView: View {
         }
     }
 
-    // MARK: - Actions
-
-    private func eventUsageCount(for action: ActionDefinition) -> Int {
-        appState.scheduleEntries.filter {
-            $0.actionDefinitionID == action.id
-        }
-        .count
-    }
+    // MARK: - Create Actions
 
     private func addShowAction() {
         let command = UDPCommand(
@@ -350,11 +282,115 @@ struct ActionsView: View {
         selectedActionID = action.id
     }
 
+    // MARK: - Delete Actions
+
     private func deleteAction(_ action: ActionDefinition) {
-        appState.actionDefinitions.removeAll { $0.id == action.id }
+        appState.actionDefinitions.removeAll {
+            $0.id == action.id
+        }
 
         if selectedActionID == action.id {
             selectedActionID = nil
         }
+    }
+
+    // MARK: - Action Metadata
+
+    private func eventUsageCount(for action: ActionDefinition) -> Int {
+        appState.scheduleEntries
+            .filter {
+                $0.actionDefinitionID == action.id
+            }
+            .count
+    }
+
+    private func stepCountText(for action: ActionDefinition) -> String {
+        switch action.type {
+        case .show:
+            return "\(action.commands.count) UDP step\(action.commands.count == 1 ? "" : "s")"
+
+        case .utility:
+            return "\(action.utilityCommands.count) utility step\(action.utilityCommands.count == 1 ? "" : "s")"
+        }
+    }
+
+    private func usageText(for action: ActionDefinition) -> String {
+        let count = eventUsageCount(for: action)
+        return "Used by \(count) Event\(count == 1 ? "" : "s")"
+    }
+
+    // MARK: - Icons
+
+    private func actionIcon(for action: ActionDefinition) -> some View {
+        ZStack {
+            Circle()
+                .fill(actionColor(for: action).opacity(0.18))
+                .frame(width: 32, height: 32)
+
+            Image(systemName: action.type == .show ? "play.fill" : "bolt.fill")
+                .font(.caption)
+                .foregroundStyle(actionColor(for: action))
+        }
+    }
+
+    private func actionColor(for action: ActionDefinition) -> Color {
+        switch action.type {
+        case .show:
+            return .blue
+
+        case .utility:
+            return .purple
+        }
+    }
+
+    // MARK: - Empty State
+
+    private func emptyState(_ message: String) -> some View {
+        Text(message)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 54, alignment: .center)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+    }
+
+    // MARK: - Styling
+
+    private var sidebarBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(nsColor: .windowBackgroundColor),
+                Color(nsColor: .controlBackgroundColor).opacity(0.65)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    private func rowBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(
+                isSelected
+                    ? Color.accentColor.opacity(0.22)
+                    : Color(nsColor: .controlBackgroundColor).opacity(0.62)
+            )
+    }
+
+    private func rowBorder(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(
+                isSelected
+                    ? Color.accentColor.opacity(0.45)
+                    : Color.white.opacity(0.08),
+                lineWidth: 1
+            )
     }
 }

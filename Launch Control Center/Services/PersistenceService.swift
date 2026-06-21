@@ -1,25 +1,18 @@
 //
-//  PersistenceService.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Centralized persistence layer.
+//  File: PersistenceService.swift
+//  Purpose: Saves and loads persisted app data from UserDefaults.
 //
-//  Responsible for saving and loading:
-//  - Actions
-//  - Events
-//  - Legacy Scheduled Events
-//
-//  Future enhancements:
-//  - JSON project files
-//  - Import / Export
-//  - Multi-project support
-//  - Cloud synchronization
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation
 
 final class PersistenceService {
-
     // MARK: - Singleton
 
     static let shared = PersistenceService()
@@ -31,7 +24,7 @@ final class PersistenceService {
     private let actionsKey = "actions"
     private let scheduleEntriesKey = "scheduleEntries"
 
-    // Legacy model
+    // Legacy model key. Retained while older saved data may still exist.
     private let scheduledEventsKey = "scheduledEvents"
 
     // MARK: - Actions
@@ -58,7 +51,7 @@ final class PersistenceService {
         }
     }
 
-    // MARK: - Events
+    // MARK: - Schedule Entries
 
     func saveScheduleEntries(_ entries: [ScheduleEntry]) {
         do {

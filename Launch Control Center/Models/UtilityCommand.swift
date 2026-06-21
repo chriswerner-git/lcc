@@ -1,32 +1,38 @@
 //
-//  UtilityCommand.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Defines a single Utility command.
+//  File: UtilityCommand.swift
+//  Purpose: Defines app-level Utility Action steps.
 //
-//  Utility Actions are dashboard automation macros.
-//  They can perform app-level functions such as:
-//  - set volume
-//  - enable / disable scheduled Show Actions
-//  - enable / disable scheduled Utility Actions
-//  - run another Action manually
-//  - send a UDP command
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation
 
 struct UtilityCommand: Identifiable, Codable {
+    // MARK: - Identity
+
     var id: UUID = UUID()
+
+    // MARK: - Basic Info
 
     var name: String = "Utility Step"
     var kind: UtilityCommandKind = .setVolume
 
-    // Delay before this Utility Step runs.
+    // MARK: - Timing
+
+    // Delay before this Utility Step runs, measured from the previous step.
     var delaySeconds: Double = 0
 
-    // Used by .setVolume.
-    // Stored as 0.0 ... 1.0.
+    // MARK: - Volume
+
+    // Used by .setVolume. Stored as 0.0 ... 1.0.
     var volumeLevel: Double = 0.75
+
+    // MARK: - Schedule Toggles
 
     // Used by .setShowScheduleEnabled.
     var showScheduleEnabled: Bool = true
@@ -34,8 +40,12 @@ struct UtilityCommand: Identifiable, Codable {
     // Used by .setUtilityScheduleEnabled.
     var utilityScheduleEnabled: Bool = true
 
+    // MARK: - Action Triggering
+
     // Used by .runAction.
     var actionDefinitionID: UUID?
+
+    // MARK: - UDP Output
 
     // Used by .sendUDP.
     var udpHost: String = "127.0.0.1"

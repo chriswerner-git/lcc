@@ -1,14 +1,13 @@
 //
-//  UDPService.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Handles low-level UDP networking.
+//  File: UDPService.swift
+//  Purpose: Handles UDP send and listen diagnostics.
 //
-//  Sending uses a simple BSD UDP socket.
-//  This is intentionally direct and fire-and-forget, which is appropriate
-//  for show-control style UDP messages.
-//
-//  Listening uses Network.framework for convenient diagnostics.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Combine
@@ -124,7 +123,11 @@ final class UDPService: ObservableObject {
 
     // MARK: - Sending
 
-    func send(message: String, host: String, port: UInt16) {
+    func send(
+        message: String,
+        host: String,
+        port: UInt16
+    ) {
         let destinationHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let destinationPort = String(port)
 
@@ -209,6 +212,8 @@ final class UDPService: ObservableObject {
 
         updateSendStatus("Sent UDP to \(host):\(port) — \(message)")
     }
+
+    // MARK: - Status Helpers
 
     private func updateSendStatus(_ status: String) {
         DispatchQueue.main.async { [weak self] in

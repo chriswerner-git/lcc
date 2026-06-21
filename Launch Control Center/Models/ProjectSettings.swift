@@ -1,15 +1,26 @@
 //
-//  ProjectSettings.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Stores user-configurable project defaults.
-//  These settings should eventually be editable only through the Setup UI,
-//  not through Xcode or source-code changes.
+//  File: ProjectSettings.swift
+//  Purpose: Legacy project settings container retained for compatibility.
+//
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation
 
 struct ProjectSettings: Codable {
+    // MARK: - Legacy Notice
+
+    // Most active settings now live directly in AppState and are persisted
+    // individually through UserDefaults or project configuration export.
+    //
+    // Keep this model only while older saved data or future migration paths
+    // may still reference it.
+
     // MARK: - Project
 
     var projectName: String = "Untitled Project"

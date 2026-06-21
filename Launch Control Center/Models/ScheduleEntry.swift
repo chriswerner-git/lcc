@@ -1,36 +1,54 @@
 //
-//  ScheduleEntry.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  A scheduled Event.
-//  Events reference an ActionDefinition and determine when that Action runs.
+//  File: ScheduleEntry.swift
+//  Purpose: Defines scheduled Events that trigger saved Actions.
 //
-//  Weekdays use Calendar weekday values:
-//  - 1 = Sunday
-//  - 2 = Monday
-//  - 3 = Tuesday
-//  - 4 = Wednesday
-//  - 5 = Thursday
-//  - 6 = Friday
-//  - 7 = Saturday
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation
 
 struct ScheduleEntry: Identifiable, Codable {
+    // MARK: - Identity
+
     var id: UUID = UUID()
 
+    // MARK: - Action Reference
+
+    // The ActionDefinition to run when this Event occurs.
     var actionDefinitionID: UUID
+
+    // MARK: - Timing
+
+    // Date and time for one-time Events, or first occurrence time for repeats.
     var startDate: Date
+
     var enabled: Bool = true
 
+    // MARK: - Repeat Rules
+
     var repeatsDaily: Bool = false
+
+    // Calendar weekday values:
+    // 1 = Sunday, 2 = Monday, 3 = Tuesday, 4 = Wednesday,
+    // 5 = Thursday, 6 = Friday, 7 = Saturday.
+    //
+    // Empty set means every day when repeatsDaily is true.
     var repeatWeekdays: Set<Int> = []
+
     var repeatUntil: Date?
 
-    // Used when editing/deleting a single occurrence from a recurring series.
+    // MARK: - Occurrence Exceptions
+
+    // Used when editing or deleting a single occurrence from a recurring series.
     // Dates are compared by calendar day, not exact time.
     var excludedOccurrenceDates: [Date] = []
+
+    // MARK: - Init
 
     init(
         id: UUID = UUID(),
@@ -51,6 +69,8 @@ struct ScheduleEntry: Identifiable, Codable {
         self.repeatUntil = repeatUntil
         self.excludedOccurrenceDates = excludedOccurrenceDates
     }
+
+    // MARK: - Codable Compatibility
 
     enum CodingKeys: String, CodingKey {
         case id

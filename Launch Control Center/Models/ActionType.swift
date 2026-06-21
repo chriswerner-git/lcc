@@ -1,10 +1,13 @@
 //
-//  ActionType.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Defines the category of an Action.
-//  Show Actions obey the Schedule Enabled toggle.
-//  Utility Actions may still run even when scheduled shows are disabled.
+//  File: ActionType.swift
+//  Purpose: Defines the primary categories of operator Actions.
+//
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import Foundation

@@ -1,25 +1,28 @@
 //
-//  EventEditorView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Creates a scheduled Event.
+//  File: EventEditorView.swift
+//  Purpose: Creates scheduled Events that trigger saved Actions.
 //
-//  An Event is a scheduled playback of an Action.
-//  The Action defines what happens.
-//  The Event defines when it happens.
-//
-//  The date is selected separately from the time.
-//  Time is entered with separate Hour, Minute, and Second fields.
-//  Repeating Events may run on selected weekdays.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import SwiftUI
 
 struct EventEditorView: View {
+    // MARK: - Environment
+
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
+    // MARK: - Action Selection
+
     @State private var selectedActionID: UUID?
+
+    // MARK: - Date / Time
 
     @State private var selectedDate: Date = EventEditorView.defaultStartDate()
     @State private var hour: Int = 0
@@ -27,9 +30,20 @@ struct EventEditorView: View {
     @State private var second: Int = 0
     @State private var meridiem: Meridiem = .am
 
+    // MARK: - Repeat Rules
+
     @State private var repeatsDaily: Bool = false
     @State private var repeatWeekdays: Set<Int> = []
     @State private var repeatUntil: Date = EventEditorView.defaultRepeatUntilDate()
+
+    // MARK: - Derived State
+
+    private var sortedActions: [ActionDefinition] {
+        appState.actionDefinitions
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+    }
 
     private var selectedAction: ActionDefinition? {
         guard let selectedActionID else {
@@ -48,6 +62,8 @@ struct EventEditorView: View {
     private var repeatSelectionIsValid: Bool {
         repeatsDaily == false || repeatWeekdays.isEmpty == false
     }
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -74,15 +90,7 @@ struct EventEditorView: View {
         }
         .frame(width: 680, height: 700)
         .onAppear {
-            if selectedActionID == nil {
-                selectedActionID = sortedActions.first?.id
-            }
-
-            if repeatWeekdays.isEmpty {
-                repeatWeekdays = [weekday(for: selectedDate)]
-            }
-
-            loadTimeFields(from: selectedDate)
+            initializeEditor()
         }
         .onChange(of: appState.use24HourTime) { _, _ in
             let date = composedStartDate()
@@ -95,18 +103,18 @@ struct EventEditorView: View {
         }
     }
 
-    // MARK: - Background
+    // MARK: - Initial State
 
-    private var background: some View {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+    private func initializeEditor() {
+        if selectedActionID == nil {
+            selectedActionID = sortedActions.first?.id
+        }
+
+        if repeatWeekdays.isEmpty {
+            repeatWeekdays = [weekday(for: selectedDate)]
+        }
+
+        loadTimeFields(from: selectedDate)
     }
 
     // MARK: - Header
@@ -162,19 +170,7 @@ struct EventEditorView: View {
             }
 
             if let selectedAction {
-                HStack(spacing: 8) {
-                    Image(systemName: selectedAction.type == .show ? "play.fill" : "bolt.fill")
-                        .foregroundStyle(actionColor(for: selectedAction.type))
-
-                    Text(actionSummary(for: selectedAction))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-                }
-                .padding(10)
-                .background(insetPanelBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                selectedActionSummary(for: selectedAction)
             }
         }
         .padding(14)
@@ -183,9 +179,20 @@ struct EventEditorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var sortedActions: [ActionDefinition] {
-        appState.actionDefinitions
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    private func selectedActionSummary(for action: ActionDefinition) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: action.type == .show ? "play.fill" : "bolt.fill")
+                .foregroundStyle(actionColor(for: action.type))
+
+            Text(actionSummary(for: action))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+        .padding(10)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func actionSummary(for action: ActionDefinition) -> String {
@@ -230,6 +237,8 @@ struct EventEditorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    // MARK: - Date Section
+
     private var dateSection: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
@@ -261,6 +270,8 @@ struct EventEditorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    // MARK: - Time Section
+
     private var timeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Time")
@@ -287,20 +298,7 @@ struct EventEditorView: View {
                 )
 
                 if appState.use24HourTime == false {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("AM / PM")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Picker("AM / PM", selection: $meridiem) {
-                            ForEach(Meridiem.allCases) { value in
-                                Text(value.rawValue).tag(value)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 120)
-                    }
+                    meridiemPicker
                 }
 
                 Spacer()
@@ -309,6 +307,23 @@ struct EventEditorView: View {
         .padding(12)
         .background(insetPanelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var meridiemPicker: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("AM / PM")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("AM / PM", selection: $meridiem) {
+                ForEach(Meridiem.allCases) { value in
+                    Text(value.rawValue).tag(value)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 120)
+        }
     }
 
     private func timeNumberField(
@@ -343,6 +358,8 @@ struct EventEditorView: View {
         }
     }
 
+    // MARK: - Repeat Section
+
     private var repeatSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle("Repeat", isOn: $repeatsDaily)
@@ -354,63 +371,78 @@ struct EventEditorView: View {
                 }
 
             if repeatsDaily {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Repeat Days")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    weekdaySelectionGrid
-
-                    HStack(spacing: 12) {
-                        Button("Every Day") {
-                            repeatWeekdays = Set(1...7)
-                        }
-
-                        Button("Weekdays") {
-                            repeatWeekdays = Set([2, 3, 4, 5, 6])
-                        }
-
-                        Button("Weekends") {
-                            repeatWeekdays = Set([1, 7])
-                        }
-
-                        Button("Clear") {
-                            repeatWeekdays.removeAll()
-                        }
-
-                        Spacer()
-                    }
-
-                    if repeatWeekdays.isEmpty {
-                        Text("Select at least one repeat day.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    Divider()
-                        .opacity(0.45)
-
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Repeat Until")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            DatePicker(
-                                "Repeat Until",
-                                selection: $repeatUntil,
-                                displayedComponents: [.date]
-                            )
-                            .labelsHidden()
-                        }
-
-                        Spacer()
-                    }
-                }
-                .padding(12)
-                .background(insetPanelBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                repeatOptions
             }
+        }
+    }
+
+    private var repeatOptions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Repeat Days")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            weekdaySelectionGrid
+            repeatQuickButtons
+            repeatValidationMessage
+
+            Divider()
+                .opacity(0.45)
+
+            repeatUntilPicker
+        }
+        .padding(12)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var repeatQuickButtons: some View {
+        HStack(spacing: 12) {
+            Button("Every Day") {
+                repeatWeekdays = Set(1...7)
+            }
+
+            Button("Weekdays") {
+                repeatWeekdays = Set([2, 3, 4, 5, 6])
+            }
+
+            Button("Weekends") {
+                repeatWeekdays = Set([1, 7])
+            }
+
+            Button("Clear") {
+                repeatWeekdays.removeAll()
+            }
+
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var repeatValidationMessage: some View {
+        if repeatWeekdays.isEmpty {
+            Text("Select at least one repeat day.")
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
+    private var repeatUntilPicker: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Repeat Until")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                DatePicker(
+                    "Repeat Until",
+                    selection: $repeatUntil,
+                    displayedComponents: [.date]
+                )
+                .labelsHidden()
+            }
+
+            Spacer()
         }
     }
 
@@ -432,11 +464,7 @@ struct EventEditorView: View {
         let isSelected = repeatWeekdays.contains(weekday.calendarValue)
 
         return Button {
-            if isSelected {
-                repeatWeekdays.remove(weekday.calendarValue)
-            } else {
-                repeatWeekdays.insert(weekday.calendarValue)
-            }
+            toggleWeekday(weekday.calendarValue)
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
@@ -450,15 +478,17 @@ struct EventEditorView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(isSelected ? Color.blue : Color.secondary)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(isSelected ? Color.blue.opacity(0.18) : Color(nsColor: .textBackgroundColor).opacity(0.18))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(isSelected ? Color.blue.opacity(0.45) : Color.white.opacity(0.08), lineWidth: 1)
-        )
+        .background(weekdayButtonBackground(isSelected: isSelected))
+        .overlay(weekdayButtonBorder(isSelected: isSelected))
         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private func toggleWeekday(_ weekday: Int) {
+        if repeatWeekdays.contains(weekday) {
+            repeatWeekdays.remove(weekday)
+        } else {
+            repeatWeekdays.insert(weekday)
+        }
     }
 
     // MARK: - Footer
@@ -502,7 +532,7 @@ struct EventEditorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    // MARK: - Actions
+    // MARK: - Add Event
 
     private func addEvent() {
         guard let selectedActionID else {
@@ -553,31 +583,31 @@ struct EventEditorView: View {
             from: selectedDate
         )
 
-        let hour24: Int
-
-        if appState.use24HourTime {
-            hour24 = clamped(hour, to: 0...23)
-        } else {
-            let safeHour = clamped(hour, to: 1...12)
-
-            switch meridiem {
-            case .am:
-                hour24 = safeHour == 12 ? 0 : safeHour
-
-            case .pm:
-                hour24 = safeHour == 12 ? 12 : safeHour + 12
-            }
-        }
-
         var composedComponents = DateComponents()
         composedComponents.year = dateComponents.year
         composedComponents.month = dateComponents.month
         composedComponents.day = dateComponents.day
-        composedComponents.hour = hour24
+        composedComponents.hour = composedHour24()
         composedComponents.minute = clamped(minute, to: 0...59)
         composedComponents.second = clamped(second, to: 0...59)
 
         return calendar.date(from: composedComponents) ?? selectedDate
+    }
+
+    private func composedHour24() -> Int {
+        if appState.use24HourTime {
+            return clamped(hour, to: 0...23)
+        }
+
+        let safeHour = clamped(hour, to: 1...12)
+
+        switch meridiem {
+        case .am:
+            return safeHour == 12 ? 0 : safeHour
+
+        case .pm:
+            return safeHour == 12 ? 12 : safeHour + 12
+        }
     }
 
     private func clamped(
@@ -586,6 +616,8 @@ struct EventEditorView: View {
     ) -> Int {
         min(max(value, range.lowerBound), range.upperBound)
     }
+
+    // MARK: - Date Helpers
 
     private func weekday(for date: Date) -> Int {
         Calendar.current.component(.weekday, from: date)
@@ -596,8 +628,6 @@ struct EventEditorView: View {
         formatter.dateFormat = "EEEE"
         return formatter.string(from: date)
     }
-
-    // MARK: - Date Defaults
 
     private static func defaultStartDate() -> Date {
         let now = Date()
@@ -672,6 +702,20 @@ struct EventEditorView: View {
         }
     }
 
+    // MARK: - Styling
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(nsColor: .windowBackgroundColor),
+                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
@@ -686,6 +730,25 @@ struct EventEditorView: View {
     private var insetPanelBackground: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
+    }
+
+    private func weekdayButtonBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(
+                isSelected
+                    ? Color.blue.opacity(0.18)
+                    : Color(nsColor: .textBackgroundColor).opacity(0.18)
+            )
+    }
+
+    private func weekdayButtonBorder(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .strokeBorder(
+                isSelected
+                    ? Color.blue.opacity(0.45)
+                    : Color.white.opacity(0.08),
+                lineWidth: 1
+            )
     }
 }
 
@@ -723,16 +786,22 @@ private enum WeekdayOption: Int, CaseIterable, Identifiable {
         switch self {
         case .sunday:
             return "Sun"
+
         case .monday:
             return "Mon"
+
         case .tuesday:
             return "Tue"
+
         case .wednesday:
             return "Wed"
+
         case .thursday:
             return "Thu"
+
         case .friday:
             return "Fri"
+
         case .saturday:
             return "Sat"
         }
