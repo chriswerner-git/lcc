@@ -24,8 +24,18 @@ class AppState: ObservableObject {
     let udpService = UDPService()
 
     private let scheduleEngine = ScheduleEngine()
-    private let scheduleFireToleranceSeconds: TimeInterval = 30
 
+    // With 10 Hz polling, Events should fire close to their scheduled time.
+    // This tolerance allows a small amount of timer/run-loop drift without
+    // allowing stale Events to fire many seconds late.
+    private let scheduleFireToleranceSeconds: TimeInterval = 1.0
+
+    // Prevents the schedule processor from overlapping itself if a timer tick
+    // arrives while a previous tick is still being evaluated.
+    private var scheduleProcessingIsActive: Bool = false
+
+    // Tracks fired Event occurrences so the 10 Hz timer does not trigger the
+    // same scheduled occurrence more than once.
     private var processedScheduleOccurrences: Set<String> = []
     private var processedScheduleOccurrenceDay: Date = Calendar.current.startOfDay(for: Date())
 
@@ -678,11 +688,22 @@ class AppState: ObservableObject {
     }
 
     private func processScheduledEvents() {
+        guard scheduleProcessingIsActive == false else {
+            return
+        }
+
+        scheduleProcessingIsActive = true
+        defer {
+            scheduleProcessingIsActive = false
+        }
+
         let now = Date()
 
         resetProcessedOccurrencesIfNeeded(now: now)
 
-        for event in scheduleEntries {
+        let entriesToProcess = scheduleEntries
+
+        for event in entriesToProcess {
             processScheduledEvent(event, now: now)
         }
     }
