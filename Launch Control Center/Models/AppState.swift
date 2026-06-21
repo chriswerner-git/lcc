@@ -1,24 +1,20 @@
 //
-//  AppState.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Central application state.
-//  This object is shared across the app UI and coordinates:
-//  - app preferences
-//  - project settings
-//  - schedule enable / disable state
-//  - saved Actions
-//  - scheduled Events
-//  - automatic scheduled execution
-//  - UDP sending
-//  - dashboard status messages
+//  File: AppState.swift
+//  Purpose: Central app state, persistence coordination, scheduling, and Action execution.
 //
-//  Important behavior:
+//  © 2026 Lunar Telephone Company. All rights reserved.
+//
+//  Notes:
 //  - Launch at Startup is an app/user preference and is not exported with project configurations.
 //  - Schedule enable toggles affect scheduled Events only.
 //  - Manual Action buttons still run regardless of schedule toggle state.
-//  - Show Actions execute UDP commands.
-//  - Utility Actions execute dashboard-level Utility commands.
+//  - Show Actions execute UDP command steps.
+//  - Utility Actions execute dashboard-level Utility steps.
 //
 
 import Foundation
@@ -1101,3 +1097,4 @@ private enum ActionRunSource {
     case manual
     case scheduled
 }
+

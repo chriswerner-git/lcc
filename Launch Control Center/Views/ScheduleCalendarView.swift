@@ -1,14 +1,19 @@
 //
-//  ScheduleCalendarView.swift
-//  Launch Control Center
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  Lunar Telephone Company                                   │
+//  │  Launch Control Center                                     │
+//  └─────────────────────────────────────────────────────────────┘
 //
-//  Weekly and monthly graphical schedule view.
+//  File: ScheduleCalendarView.swift
+//  Purpose: Schedule calendar interface for viewing, editing, and managing Events.
 //
-//  Weekly view uses an hour grid.
-//  Monthly view shows daily counts by Action type.
+//  © 2026 Lunar Telephone Company. All rights reserved.
 //
-//  Event actions are available by right-click context menu.
-//  Double-click an Event chip to edit.
+//  Notes:
+//  - Supports month and week schedule views.
+//  - Scheduled Events trigger saved ActionDefinition records.
+//  - Repeating Events may include selected weekdays, repeat-until dates, and excluded occurrences.
+//  - Week start behavior follows the app preference in AppState.
 //
 
 import SwiftUI
@@ -1517,3 +1522,4 @@ private enum WeekdayEditOption: Int, CaseIterable, Identifiable {
         }
     }
 }
+
