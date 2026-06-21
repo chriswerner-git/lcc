@@ -1,0 +1,49 @@
+# ┌─────────────────────────────────────────────────────────────┐
+# │  Lunar Telephone Company                                   │
+# │  Launch Control Center                                     │
+# └─────────────────────────────────────────────────────────────┘
+#
+# Git ignore rules for Xcode / macOS project hygiene.
+
+# macOS Finder files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode user-specific files
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+
+# Xcode build products
+build/
+Build/
+DerivedData/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# CocoaPods / Carthage / dependency tooling, if ever used
+Pods/
+Carthage/Build/
+
+# Archives and generated exports
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.lock
+
+# Local environment files
+.env
+.env.*

@@ -10,9 +10,22 @@
 		C489483A2FE6F6070023F75C /* Launch Control Center.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Launch Control Center.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C48948A72FE877510023F75C /* Exceptions for "Launch Control Center" folder in "Launch Control Center" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				.gitignore,
+			);
+			target = C48948392FE6F6070023F75C /* Launch Control Center */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C489483C2FE6F6070023F75C /* Launch Control Center */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C48948A72FE877510023F75C /* Exceptions for "Launch Control Center" folder in "Launch Control Center" target */,
+			);
 			path = "Launch Control Center";
 			sourceTree = "<group>";
 		};

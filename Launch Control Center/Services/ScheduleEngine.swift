@@ -13,10 +13,14 @@
 import Foundation
 
 final class ScheduleEngine {
+    // MARK: - Properties
+
     private var timer: Timer?
 
+    // MARK: - Control
+
     func start(
-        interval: TimeInterval = 1.0,
+        interval: TimeInterval = 0.1,
         handler: @escaping () -> Void
     ) {
         stop()
@@ -26,6 +30,10 @@ final class ScheduleEngine {
             repeats: true
         ) { _ in
             handler()
+        }
+
+        if let timer {
+            RunLoop.main.add(timer, forMode: .common)
         }
     }
 
