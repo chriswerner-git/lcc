@@ -5,7 +5,7 @@
 //  └─────────────────────────────────────────────────────────────┘
 //
 //  File: UDPService.swift
-//  Purpose: Handles UDP send and listen diagnostics.
+//  Purpose: Handles UDP send and short-duration listen diagnostics.
 //
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
@@ -29,15 +29,27 @@ final class UDPService: ObservableObject {
     @Published var lastSendStatus: String = "No UDP messages sent"
     @Published var listenerState: UDPListenerState = .stopped
     @Published var listeningPort: UInt16?
+    @Published var listenerAutomaticStopMessage: String?
 
     // MARK: - Private Properties
 
     private var listener: NWListener?
+    private var listenerTimeoutTimer: Timer?
+    private var listenerCancellationStatusMessage: String = "UDP listener stopped"
+
+    // MARK: - Constants
+
+    private let listenerTimeoutSeconds: TimeInterval = 10 * 60
 
     // MARK: - Listening
 
     func startListening(port: UInt16) {
-        stopListening()
+        stopListening(
+            statusMessage: "UDP listener restarting",
+            showAutomaticStopAlert: false
+        )
+
+        listenerAutomaticStopMessage = nil
 
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             listenerState = .failed
@@ -48,14 +60,19 @@ final class UDPService: ObservableObject {
 
         listenerState = .starting
         listeningPort = port
-        lastReceivedMessage = "Starting UDP listener on port \(port)"
+        lastReceivedMessage = "Starting UDP listener on port \(port). Diagnostic listener will stop automatically after 10 minutes."
 
         do {
             listener = try NWListener(using: .udp, on: nwPort)
 
             listener?.newConnectionHandler = { [weak self] newConnection in
+                guard let self else {
+                    newConnection.cancel()
+                    return
+                }
+
                 newConnection.start(queue: .main)
-                self?.receive(on: newConnection)
+                self.receive(on: newConnection)
             }
 
             listener?.stateUpdateHandler = { [weak self] state in
@@ -68,17 +85,20 @@ final class UDPService: ObservableObject {
                     case .ready:
                         self.listenerState = .listening
                         self.listeningPort = port
-                        self.lastReceivedMessage = "Listening on UDP port \(port)"
+                        self.lastReceivedMessage = "Listening on UDP port \(port). Listener will stop automatically after 10 minutes."
+                        self.startListenerTimeoutTimer()
 
                     case .failed(let error):
+                        self.cancelListenerTimeoutTimer()
                         self.listenerState = .failed
                         self.listeningPort = nil
                         self.lastReceivedMessage = "UDP listener failed: \(error.localizedDescription)"
 
                     case .cancelled:
+                        self.cancelListenerTimeoutTimer()
                         self.listenerState = .stopped
                         self.listeningPort = nil
-                        self.lastReceivedMessage = "UDP listener stopped"
+                        self.lastReceivedMessage = self.listenerCancellationStatusMessage
 
                     default:
                         break
@@ -88,6 +108,7 @@ final class UDPService: ObservableObject {
 
             listener?.start(queue: .main)
         } catch {
+            cancelListenerTimeoutTimer()
             listenerState = .failed
             listeningPort = nil
             lastReceivedMessage = "Failed to listen: \(error.localizedDescription)"
@@ -95,30 +116,106 @@ final class UDPService: ObservableObject {
     }
 
     func stopListening() {
+        stopListening(
+            statusMessage: "UDP listener stopped",
+            showAutomaticStopAlert: false
+        )
+    }
+
+    private func stopListening(
+        statusMessage: String,
+        showAutomaticStopAlert: Bool
+    ) {
+        cancelListenerTimeoutTimer()
+
+        listenerCancellationStatusMessage = statusMessage
+
+        if showAutomaticStopAlert {
+            listenerAutomaticStopMessage = statusMessage
+        }
+
         listener?.cancel()
         listener = nil
+
         listenerState = .stopped
         listeningPort = nil
-        lastReceivedMessage = "UDP listener stopped"
+        lastReceivedMessage = statusMessage
     }
 
     private func receive(on connection: NWConnection) {
-        connection.receiveMessage { [weak self] data, _, _, error in
+        connection.receiveMessage { [weak self, weak connection] data, _, _, error in
             DispatchQueue.main.async {
+                guard let self else {
+                    connection?.cancel()
+                    return
+                }
+
+                guard self.listenerState == .listening else {
+                    connection?.cancel()
+                    return
+                }
+
                 if let data,
                    let message = String(data: data, encoding: .utf8) {
-                    self?.lastReceivedMessage = message
+                    self.lastReceivedMessage = message
                 }
 
                 if let error {
-                    self?.lastReceivedMessage = "UDP receive error: \(error.localizedDescription)"
+                    self.lastReceivedMessage = "UDP receive error: \(error.localizedDescription)"
                 }
             }
 
-            if error == nil {
-                self?.receive(on: connection)
+            guard error == nil else {
+                connection?.cancel()
+                return
+            }
+
+            DispatchQueue.main.async { [weak self, weak connection] in
+                guard let self,
+                      let connection,
+                      self.listenerState == .listening else {
+                    connection?.cancel()
+                    return
+                }
+
+                self.receive(on: connection)
             }
         }
+    }
+
+    // MARK: - Listener Timeout
+
+    private func startListenerTimeoutTimer() {
+        cancelListenerTimeoutTimer()
+
+        listenerTimeoutTimer = Timer.scheduledTimer(
+            withTimeInterval: listenerTimeoutSeconds,
+            repeats: false
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.listenerTimedOut()
+            }
+        }
+
+        if let listenerTimeoutTimer {
+            RunLoop.main.add(listenerTimeoutTimer, forMode: .common)
+        }
+    }
+
+    private func cancelListenerTimeoutTimer() {
+        listenerTimeoutTimer?.invalidate()
+        listenerTimeoutTimer = nil
+    }
+
+    private func listenerTimedOut() {
+        stopListening(
+            statusMessage: "UDP diagnostic listener stopped automatically after 10 minutes.",
+            showAutomaticStopAlert: true
+        )
+    }
+
+    func clearAutomaticStopMessage() {
+        listenerAutomaticStopMessage = nil
     }
 
     // MARK: - Sending
@@ -223,5 +320,12 @@ final class UDPService: ObservableObject {
 
     private func currentSocketError() -> String {
         String(cString: strerror(errno))
+    }
+
+    deinit {
+        stopListening(
+            statusMessage: "UDP listener stopped",
+            showAutomaticStopAlert: false
+        )
     }
 }

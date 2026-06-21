@@ -11,14 +11,15 @@
 //
 //  Notes:
 //  - Launch at Startup is an app/user preference and is not exported with project configurations.
+//  - Prevent Computer Sleep is an app/user preference and is not exported with project configurations.
 //  - Schedule enable toggles affect scheduled Events only.
 //  - Manual Action buttons still run regardless of schedule toggle state.
 //  - Show Actions execute UDP command steps.
 //  - Utility Actions execute dashboard-level Utility steps.
 //
 
-import Foundation
 import Combine
+import Foundation
 
 class AppState: ObservableObject {
     let udpService = UDPService()
@@ -40,11 +41,32 @@ class AppState: ObservableObject {
     private var processedScheduleOccurrenceDay: Date = Calendar.current.startOfDay(for: Date())
 
     private let loginStartupService = LoginStartupService()
+    private let sleepPreventionService = SleepPreventionService()
+    private let systemLifecycleService = SystemLifecycleService()
 
     // MARK: - App Preferences
 
     @Published var launchAtStartupEnabled: Bool = false
     @Published var launchAtStartupStatusMessage: String = "Launch at startup status unknown."
+
+    @Published var preventComputerSleepEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                preventComputerSleepEnabled,
+                forKey: "preventComputerSleepEnabled"
+            )
+        }
+    }
+
+    @Published var preventComputerSleepStatusMessage: String = "Prevent computer sleep is disabled."
+
+    // MARK: - System Lifecycle
+
+    @Published var systemLifecycleStatusMessage: String = "System awake. Monitoring not yet started."
+    @Published var systemLifecycleWarningMessage: String?
+
+    @Published var lastSystemSleepTime: Date?
+    @Published var lastSystemWakeTime: Date?
 
     // MARK: - Project / Display Settings
 
@@ -167,6 +189,8 @@ class AppState: ObservableObject {
     // MARK: - Init
 
     init() {
+        self.preventComputerSleepEnabled = UserDefaults.standard.object(forKey: "preventComputerSleepEnabled") as? Bool ?? false
+
         self.projectName = UserDefaults.standard.string(forKey: "projectName") ?? "Untitled Project"
         self.projectNotes = UserDefaults.standard.string(forKey: "projectNotes") ?? ""
         self.use24HourTime = UserDefaults.standard.object(forKey: "use24HourTime") as? Bool ?? true
@@ -203,11 +227,15 @@ class AppState: ObservableObject {
         self.scheduleEntries = PersistenceService.shared.loadScheduleEntries()
 
         refreshLaunchAtStartupStatus()
+        applyPreventComputerSleepPreference()
+        startSystemLifecycleMonitoring()
         startScheduleEngine()
     }
 
     deinit {
         scheduleEngine.stop()
+        systemLifecycleService.stop()
+        sleepPreventionService.disable()
     }
 
     // MARK: - Launch at Startup
@@ -248,6 +276,129 @@ class AppState: ObservableObject {
             controlStatus = .error
             lastMessage = "Launch at startup update failed: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Prevent Computer Sleep
+
+    func refreshSleepPreventionStatus() {
+        if preventComputerSleepEnabled {
+            preventComputerSleepStatusMessage = sleepPreventionService.isActive
+                ? "This Mac will not idle-sleep while Launch Control Center is running."
+                : "Prevent computer sleep is enabled, but the macOS assertion is not active."
+        } else {
+            preventComputerSleepStatusMessage = "Prevent computer sleep is disabled."
+        }
+    }
+
+    func setPreventComputerSleepEnabled(_ enabled: Bool) {
+        if enabled {
+            do {
+                try sleepPreventionService.enable(
+                    reason: "Launch Control Center is preventing idle system sleep."
+                )
+
+                preventComputerSleepEnabled = true
+                preventComputerSleepStatusMessage = "This Mac will not idle-sleep while Launch Control Center is running."
+                lastMessage = "Prevent computer sleep enabled"
+                controlStatus = .idle
+            } catch {
+                sleepPreventionService.disable()
+                preventComputerSleepEnabled = false
+                preventComputerSleepStatusMessage = "Prevent computer sleep failed: \(error.localizedDescription)"
+                lastMessage = "Prevent computer sleep failed: \(error.localizedDescription)"
+                controlStatus = .error
+            }
+        } else {
+            sleepPreventionService.disable()
+            preventComputerSleepEnabled = false
+            preventComputerSleepStatusMessage = "Prevent computer sleep is disabled."
+            lastMessage = "Prevent computer sleep disabled"
+            controlStatus = .idle
+        }
+    }
+
+    private func applyPreventComputerSleepPreference() {
+        if preventComputerSleepEnabled {
+            setPreventComputerSleepEnabled(true)
+        } else {
+            sleepPreventionService.disable()
+            refreshSleepPreventionStatus()
+        }
+    }
+
+    // MARK: - System Lifecycle Monitoring
+
+    private func startSystemLifecycleMonitoring() {
+        systemLifecycleService.start { [weak self] event in
+            guard let self else {
+                return
+            }
+
+            switch event {
+            case .willSleep(let date):
+                self.handleSystemWillSleep(date)
+
+            case .didWake(let date):
+                self.handleSystemDidWake(date)
+
+            case .didBecomeActive(let date):
+                self.handleAppDidBecomeActive(date)
+
+            case .willTerminate(let date):
+                self.handleAppWillTerminate(date)
+            }
+        }
+
+        systemLifecycleStatusMessage = "System awake. Monitoring sleep and wake events."
+    }
+
+    private func handleSystemWillSleep(_ date: Date) {
+        lastSystemSleepTime = date
+
+        let timestamp = formattedEventTimestamp(date)
+
+        systemLifecycleStatusMessage = "Mac will sleep at \(timestamp). Scheduled Events cannot run while the Mac is asleep."
+        systemLifecycleWarningMessage = "Mac is going to sleep. Scheduled Events will not run while asleep."
+
+        lastMessage = "Mac will sleep at \(timestamp)"
+    }
+
+    private func handleSystemDidWake(_ date: Date) {
+        lastSystemWakeTime = date
+
+        let timestamp = formattedEventTimestamp(date)
+
+        systemLifecycleStatusMessage = "Mac woke at \(timestamp). Review scheduled Events before live operation."
+        systemLifecycleWarningMessage = "Mac woke at \(timestamp). Scheduled Events may have been missed."
+
+        lastMessage = "Mac woke at \(timestamp). Scheduled Events may have been missed."
+    }
+
+    private func handleAppDidBecomeActive(_ date: Date) {
+        if systemLifecycleWarningMessage == nil {
+            systemLifecycleStatusMessage = "System active. Monitoring sleep and wake events."
+        }
+    }
+
+    private func handleAppWillTerminate(_ date: Date) {
+        let timestamp = formattedEventTimestamp(date)
+
+        systemLifecycleStatusMessage = "Launch Control Center is quitting at \(timestamp)."
+        lastMessage = "Launch Control Center quitting at \(timestamp)"
+
+        sleepPreventionService.disable()
+    }
+
+    func clearSystemLifecycleWarning() {
+        systemLifecycleWarningMessage = nil
+
+        if let lastSystemWakeTime {
+            systemLifecycleStatusMessage = "Mac last woke at \(formattedEventTimestamp(lastSystemWakeTime)). Warning cleared."
+        } else {
+            systemLifecycleStatusMessage = "System awake. Monitoring sleep and wake events."
+        }
+
+        lastMessage = "Sleep/wake warning cleared"
     }
 
     // MARK: - Import / Export
@@ -346,6 +497,7 @@ class AppState: ObservableObject {
         processedScheduleOccurrenceDay = Calendar.current.startOfDay(for: Date())
 
         refreshLaunchAtStartupStatus()
+        refreshSleepPreventionStatus()
 
         lastMessage = "Imported configuration: \(configuration.projectName)"
         controlStatus = .idle
@@ -1118,4 +1270,3 @@ private enum ActionRunSource {
     case manual
     case scheduled
 }
-

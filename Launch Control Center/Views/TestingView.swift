@@ -56,6 +56,29 @@ private struct TestingContentView: View {
             .padding(16)
         }
         .frame(width: 660, height: 640)
+        .alert(
+            "UDP Listener Stopped",
+            isPresented: automaticStopAlertIsPresented
+        ) {
+            Button("OK") {
+                udpService.clearAutomaticStopMessage()
+            }
+        } message: {
+            Text(udpService.listenerAutomaticStopMessage ?? "")
+        }
+    }
+
+    private var automaticStopAlertIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                udpService.listenerAutomaticStopMessage != nil
+            },
+            set: { isPresented in
+                if isPresented == false {
+                    udpService.clearAutomaticStopMessage()
+                }
+            }
+        )
     }
 
     // MARK: - Header
@@ -127,12 +150,33 @@ private struct TestingContentView: View {
                 .disabled(stopListeningDisabled)
             }
 
+            listenerTimeoutNotice
             listenerDetailLine
         }
         .padding(12)
         .background(cardBackground)
         .overlay(cardBorder)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var listenerTimeoutNotice: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "timer")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 1)
+
+            Text("Diagnostic listener automatically stops after 10 minutes. This prevents the UDP test listener from remaining open during long unattended operation.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var listenerStatusPill: some View {

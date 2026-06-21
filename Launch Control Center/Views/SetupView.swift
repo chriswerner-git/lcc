@@ -42,6 +42,7 @@ struct SetupView: View {
         .frame(width: 840, height: 720)
         .onAppear {
             appState.refreshLaunchAtStartupStatus()
+            appState.refreshSleepPreventionStatus()
         }
     }
 
@@ -259,6 +260,33 @@ struct SetupView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
             }
+
+            preferenceRow(
+                systemImage: "moon.zzz.fill",
+                title: "Prevent Computer Sleep",
+                subtitle: appState.preventComputerSleepStatusMessage
+            ) {
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: {
+                            appState.preventComputerSleepEnabled
+                        },
+                        set: { newValue in
+                            appState.setPreventComputerSleepEnabled(newValue)
+                        }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
+
+            Text("Prevent Computer Sleep keeps the Mac awake while Launch Control Center is running. It does not prevent sleep caused by closing a laptop lid, low battery, shutdown, restart, or choosing Sleep manually.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 2)
         }
         .padding(14)
         .background(cardBackground)

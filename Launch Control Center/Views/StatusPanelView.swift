@@ -47,7 +47,7 @@ struct DashboardClockView: View {
             ZStack(alignment: .bottomTrailing) {
                 clockDisplay(for: context.date)
 
-                aboutButton
+                lowerLeftDiagnostics
                     .frame(
                         maxWidth: .infinity,
                         maxHeight: .infinity,
@@ -84,6 +84,32 @@ struct DashboardClockView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Lower-Left Diagnostics
+
+    private var lowerLeftDiagnostics: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            uptimeMetadata
+            aboutButton
+        }
+        .padding(.leading, 2)
+        .padding(.bottom, 2)
+    }
+
+    private var uptimeMetadata: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Computer Uptime: \(UptimeService.formattedComputerUptime())")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            Text("App Uptime: \(UptimeService.formattedAppUptime())")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .help("Computer uptime is time since the Mac last booted. App uptime is time since Launch Control Center started.")
     }
 
     private var aboutButton: some View {
