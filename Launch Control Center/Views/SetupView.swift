@@ -23,6 +23,7 @@ struct SetupView: View {
 
     @State private var selectedCategory: SetupCategory = .appPreferences
     @State private var configurationStatus: String = "No configuration import/export yet."
+    @State private var resetStatus: String = "No reset actions have been performed."
 
     // MARK: - Body
 
@@ -162,6 +163,9 @@ struct SetupView: View {
 
                     case .importExport:
                         configurationBackupCard
+
+                    case .resetDefaults:
+                        resetDefaultsCard
                     }
                 }
                 .padding(.trailing, 6)
@@ -725,6 +729,160 @@ struct SetupView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    // MARK: - Reset / Defaults
+
+    private var resetDefaultsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeader(
+                title: "Reset / Defaults",
+                subtitle: "Destructive maintenance actions for this Mac and project."
+            )
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Use these only when you are intentionally clearing or rebuilding setup data.")
+                        .font(.subheadline)
+                        .bold()
+
+                    Text("Each command asks for confirmation before it runs. Deleted Actions and Events cannot be recovered unless you previously exported a configuration backup.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+            }
+            .padding(12)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            resetActionRow(
+                operation: .appPreferences,
+                systemImage: "macwindow",
+                title: "Restore Default App Preferences",
+                subtitle: "Resets time display, week start, syslog name, Dock icon behavior, startup, sleep prevention, and log retention."
+            )
+
+            resetActionRow(
+                operation: .projectPreferences,
+                systemImage: "slider.horizontal.3",
+                title: "Restore Default Project Preferences",
+                subtitle: "Resets project identity, notes, UDP defaults, schedule enable messages, volume output, volume presets, and current volume."
+            )
+
+            resetActionRow(
+                operation: .events,
+                systemImage: "calendar.badge.minus",
+                title: "Delete All Events",
+                subtitle: "Deletes all scheduled Events, recurrence data, exclusions, and schedule execution history. Actions remain untouched."
+            )
+
+            resetActionRow(
+                operation: .actionsAndEvents,
+                systemImage: "trash.fill",
+                title: "Delete All Actions & Events",
+                subtitle: "Deletes all Actions, scheduled Events, recurrence data, exclusions, and schedule execution history."
+            )
+
+            Text(resetStatus)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(insetPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func resetActionRow(
+        operation: ResetOperation,
+        systemImage: String,
+        title: String,
+        subtitle: String
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(operation.isDestructive ? .red : .blue)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline)
+                    .bold()
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Button {
+                performReset(operation)
+            } label: {
+                Text(operation.buttonTitle)
+                    .frame(width: 132)
+            }
+            .buttonStyle(.bordered)
+            .tint(operation.isDestructive ? .red : .blue)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func performReset(_ operation: ResetOperation) {
+        guard confirmReset(operation) else {
+            resetStatus = "Reset cancelled."
+            return
+        }
+
+        do {
+            switch operation {
+            case .appPreferences:
+                try appState.restoreDefaultAppPreferences()
+
+            case .projectPreferences:
+                try appState.restoreDefaultProjectPreferences()
+
+            case .events:
+                try appState.deleteAllEvents()
+
+            case .actionsAndEvents:
+                try appState.deleteAllActionsAndEvents()
+            }
+
+            resetStatus = operation.successMessage
+        } catch {
+            resetStatus = "Reset failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func confirmReset(_ operation: ResetOperation) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = operation.confirmationTitle
+        alert.informativeText = operation.confirmationMessage
+        alert.alertStyle = operation.isDestructive ? .critical : .warning
+        alert.addButton(withTitle: operation.confirmButtonTitle)
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        return response == .alertFirstButtonReturn
+    }
+
     // MARK: - Export
 
     private func exportConfiguration() {
@@ -1004,6 +1162,7 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
     case appPreferences = "App Preferences"
     case projectPreferences = "Project Preferences"
     case importExport = "Import / Export"
+    case resetDefaults = "Reset / Defaults"
 
     var id: String {
         rawValue
@@ -1019,6 +1178,9 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
 
         case .importExport:
             return "externaldrive.fill"
+
+        case .resetDefaults:
+            return "exclamationmark.triangle.fill"
         }
     }
 
@@ -1032,8 +1194,105 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
 
         case .importExport:
             return "Save or load full Launch Control configurations."
+
+        case .resetDefaults:
+            return "Restore defaults or delete stored project data."
         }
     }
 }
+
+// MARK: - Reset Operation
+
+private enum ResetOperation {
+    case appPreferences
+    case projectPreferences
+    case events
+    case actionsAndEvents
+
+    var isDestructive: Bool {
+        switch self {
+        case .appPreferences, .projectPreferences:
+            return false
+
+        case .events, .actionsAndEvents:
+            return true
+        }
+    }
+
+    var buttonTitle: String {
+        switch self {
+        case .appPreferences, .projectPreferences:
+            return "Restore"
+
+        case .events, .actionsAndEvents:
+            return "Delete"
+        }
+    }
+
+    var confirmButtonTitle: String {
+        switch self {
+        case .appPreferences:
+            return "Restore App Defaults"
+
+        case .projectPreferences:
+            return "Restore Project Defaults"
+
+        case .events:
+            return "Delete Events"
+
+        case .actionsAndEvents:
+            return "Delete Actions & Events"
+        }
+    }
+
+    var confirmationTitle: String {
+        switch self {
+        case .appPreferences:
+            return "Restore Default App Preferences?"
+
+        case .projectPreferences:
+            return "Restore Default Project Preferences?"
+
+        case .events:
+            return "Delete All Events?"
+
+        case .actionsAndEvents:
+            return "Delete All Actions & Events?"
+        }
+    }
+
+    var confirmationMessage: String {
+        switch self {
+        case .appPreferences:
+            return "This will restore app-level preferences on this Mac, including time display, week start, syslog name, Dock icon behavior, launch-at-startup, sleep prevention, and log retention.\n\nThis cannot be undone."
+
+        case .projectPreferences:
+            return "This will restore project preferences to their defaults, including project name, notes, UDP defaults, schedule enable messages, volume output settings, volume presets, and current volume.\n\nActions and scheduled Events will not be deleted. This cannot be undone."
+
+        case .events:
+            return "This will permanently delete all scheduled Events, recurrence data, removed occurrences, and schedule execution history.\n\nActions will remain available. This cannot be undone. Export a configuration first if you may need to recover this schedule."
+
+        case .actionsAndEvents:
+            return "This will permanently delete all Actions, scheduled Events, recurrence data, removed occurrences, and schedule execution history.\n\nThis cannot be undone. Export a configuration first if you may need to recover this project."
+        }
+    }
+
+    var successMessage: String {
+        switch self {
+        case .appPreferences:
+            return "Restored default app preferences."
+
+        case .projectPreferences:
+            return "Restored default project preferences."
+
+        case .events:
+            return "Deleted all Events."
+
+        case .actionsAndEvents:
+            return "Deleted all Actions and Events."
+        }
+    }
+}
+
 
 

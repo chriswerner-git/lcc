@@ -183,6 +183,35 @@ struct ConfigurationImportPreview {
     var summary: ConfigurationAuditSummary
 }
 
+// MARK: - Configuration Import Errors
+
+enum ConfigurationImportError: LocalizedError {
+    case actionsRunning(count: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .actionsRunning(let count):
+            let actionText = count == 1 ? "Action is" : "Actions are"
+            return "Import blocked because \(count) \(actionText) currently running. Wait for all Actions to finish before replacing the project configuration."
+        }
+    }
+}
+
+
+// MARK: - Reset Errors
+
+enum AppResetError: LocalizedError {
+    case actionsRunning(count: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .actionsRunning(let count):
+            let actionText = count == 1 ? "Action is" : "Actions are"
+            return "Reset blocked because \(count) \(actionText) currently running. Wait for all Actions to finish before resetting stored data."
+        }
+    }
+}
+
 final class AppState: ObservableObject {
     let udpService = UDPService()
 
@@ -209,6 +238,10 @@ final class AppState: ObservableObject {
 
     // Tracks Actions currently executing so the same Action cannot overlap itself.
     private var runningActionIDs: Set<UUID> = []
+
+    // Allows grouped preference updates to produce one final volume output message
+    // instead of a burst of intermediate UDP messages.
+    private var volumePreferenceOutputIsSuspended: Bool = false
 
     private let maximumActionRuntimeSeconds: TimeInterval = 120
     private let appLaunchDate = Date()
@@ -841,6 +874,17 @@ final class AppState: ObservableObject {
 
     func importConfiguration(from url: URL) throws {
         let configuration = try decodeConfiguration(from: url)
+
+        guard runningActionIDs.isEmpty else {
+            let runningCount = runningActionIDs.count
+            let message = "Configuration import blocked because \(runningCount) Action\(runningCount == 1 ? " is" : "s are") still running."
+
+            lastMessage = message
+            logger.warning(message)
+
+            throw ConfigurationImportError.actionsRunning(count: runningCount)
+        }
+
         applyConfiguration(configuration)
     }
 
@@ -1185,11 +1229,7 @@ final class AppState: ObservableObject {
         scheduledEvents = configuration.scheduledEvents
         scheduleEntries = configuration.scheduleEntries
 
-        processedScheduleOccurrences.removeAll()
-        processedScheduleOccurrenceDay = Calendar.current.startOfDay(for: Date())
-        processedScheduleOccurrenceTotalCount = 0
-
-        runningActionIDs.removeAll()
+        resetScheduleOccurrenceGuards()
 
         refreshLaunchAtStartupStatus()
         refreshSleepPreventionStatus()
@@ -1197,6 +1237,119 @@ final class AppState: ObservableObject {
         lastMessage = "Imported configuration: \(configuration.projectName)"
         controlStatus = .idle
         logger.info(lastMessage)
+    }
+
+    // MARK: - Reset / Destructive Actions
+
+    func restoreDefaultAppPreferences() throws {
+        try ensureNoActionsRunningForReset()
+
+        use24HourTime = true
+        weekStartDay = 1
+        operationalLogRetentionDays = 90
+        syslogDeviceName = AppState.defaultSyslogDeviceName()
+        dockIconVisibilityPreference = .showWhenDashboardWindowIsOpen
+
+        setPreventComputerSleepEnabled(false)
+
+        try loginStartupService.setEnabled(false)
+        refreshLaunchAtStartupStatus()
+        refreshSleepPreventionStatus()
+
+        controlStatus = .idle
+        lastMessage = "Restored default app preferences"
+        logger.warning(lastMessage)
+    }
+
+    func restoreDefaultProjectPreferences() throws {
+        try ensureNoActionsRunningForReset()
+
+        projectName = "Untitled Project"
+        projectNotes = ""
+
+        incomingUDPPort = 8000
+        defaultDestinationHost = "127.0.0.1"
+        defaultDestinationPort = 8001
+
+        volumePreferenceOutputIsSuspended = true
+        volumeDestinationHost = "127.0.0.1"
+        volumeDestinationPort = 8001
+        volumeMessagePrefix = "/cue/selected/level/0/"
+        volumeOutputMinimum = -60
+        volumeOutputMaximum = 12
+        volumeMuteLevel = -60
+        volumeLevel = 0.75
+        lastUnmutedVolumeLevel = 0.75
+        isMuted = false
+        lowVolumeLevel = 0.35
+        normalVolumeLevel = 0.75
+        highVolumeLevel = 0.90
+        volumePreferenceOutputIsSuspended = false
+
+        showActionsEnabled = true
+        utilityActionsEnabled = true
+        scheduleEnabledOnMessage = "SCHEDULE_ENABLED"
+        scheduleEnabledOffMessage = "SCHEDULE_DISABLED"
+
+        sendVolumeLevel()
+
+        controlStatus = .idle
+        lastMessage = "Restored default project preferences"
+        logger.warning(lastMessage)
+    }
+
+    func deleteAllEvents() throws {
+        try ensureNoActionsRunningForReset()
+
+        deleteEventsAndScheduleHistory()
+
+        controlStatus = .idle
+        lastMessage = "Deleted all Events"
+        logger.warning(lastMessage)
+    }
+
+    func deleteAllActionsAndEvents() throws {
+        try ensureNoActionsRunningForReset()
+
+        actionDefinitions = []
+        PersistenceService.shared.deleteActionDefinitions()
+
+        deleteEventsAndScheduleHistory()
+
+        controlStatus = .idle
+        lastMessage = "Deleted all Actions and Events"
+        logger.warning(lastMessage)
+    }
+
+    private func ensureNoActionsRunningForReset() throws {
+        guard runningActionIDs.isEmpty else {
+            let runningCount = runningActionIDs.count
+            let message = "Reset blocked because \(runningCount) Action\(runningCount == 1 ? " is" : "s are") still running."
+
+            lastMessage = message
+            logger.warning(message)
+
+            throw AppResetError.actionsRunning(count: runningCount)
+        }
+    }
+
+    private func deleteEventsAndScheduleHistory() {
+        scheduledEvents = []
+        scheduleEntries = []
+        scheduleExecutionHistory = []
+
+        PersistenceService.shared.deleteScheduledEvents()
+        PersistenceService.shared.deleteScheduleEntries()
+        PersistenceService.shared.deleteScheduleExecutionHistory()
+
+        resetScheduleOccurrenceGuards()
+        lastEventMessage = "No Event has run yet"
+    }
+
+    private func resetScheduleOccurrenceGuards() {
+        processedScheduleOccurrences.removeAll()
+        processedScheduleOccurrenceDay = Calendar.current.startOfDay(for: Date())
+        processedScheduleOccurrenceTotalCount = 0
     }
 
     // MARK: - Schedule Toggles
@@ -1770,6 +1923,10 @@ final class AppState: ObservableObject {
     }
 
     private func handleVolumePreferenceChange() {
+        guard volumePreferenceOutputIsSuspended == false else {
+            return
+        }
+
         sendVolumeLevel()
     }
 
@@ -2302,5 +2459,6 @@ private enum ActionRunSource {
     case scheduled
     case automated
 }
+
 
 

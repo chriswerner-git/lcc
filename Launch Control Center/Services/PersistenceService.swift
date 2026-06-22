@@ -52,6 +52,10 @@ final class PersistenceService {
         }
     }
 
+    func deleteActionDefinitions() {
+        UserDefaults.standard.removeObject(forKey: actionsKey)
+    }
+
     // MARK: - Schedule Entries
 
     func saveScheduleEntries(_ entries: [ScheduleEntry]) {
@@ -74,6 +78,10 @@ final class PersistenceService {
             print("Failed to load Events: \(error)")
             return []
         }
+    }
+
+    func deleteScheduleEntries() {
+        UserDefaults.standard.removeObject(forKey: scheduleEntriesKey)
     }
 
     // MARK: - Schedule Execution History
@@ -100,6 +108,10 @@ final class PersistenceService {
         }
     }
 
+    func deleteScheduleExecutionHistory() {
+        UserDefaults.standard.removeObject(forKey: scheduleExecutionHistoryKey)
+    }
+
     // MARK: - Legacy Scheduled Events
 
     func saveScheduledEvents(_ events: [ScheduledEvent]) {
@@ -123,5 +135,10 @@ final class PersistenceService {
             return []
         }
     }
+
+    func deleteScheduledEvents() {
+        UserDefaults.standard.removeObject(forKey: scheduledEventsKey)
+    }
 }
+
 
