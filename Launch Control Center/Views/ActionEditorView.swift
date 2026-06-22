@@ -155,11 +155,11 @@ struct ActionEditorView: View {
                     .frame(minHeight: 72, maxHeight: 96)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color(nsColor: .textBackgroundColor).opacity(0.55))
+                            .fill(LCCDesign.ColorToken.textBackground.opacity(0.55))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
                     )
 
                 Text("Optional notes for operators, reminders, or context. Not shown elsewhere.")
@@ -245,7 +245,7 @@ struct ActionEditorView: View {
         VStack(alignment: .leading, spacing: 12) {
             stepCardHeader(
                 iconName: command.wrappedValue.messageType.systemImage,
-                iconColor: .blue,
+                iconColor: LCCDesign.ColorToken.active,
                 title: "Message Step \(stepIndex + 1)",
                 subtitle: command.wrappedValue.name
             ) {
@@ -462,7 +462,7 @@ struct ActionEditorView: View {
         VStack(alignment: .leading, spacing: 12) {
             stepCardHeader(
                 iconName: iconName(for: command.wrappedValue.kind),
-                iconColor: .purple,
+                iconColor: LCCDesign.ColorToken.utilityAction,
                 title: "Utility Step \(stepIndex + 1)",
                 subtitle: command.wrappedValue.kind.rawValue
             ) {
@@ -663,16 +663,16 @@ struct ActionEditorView: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(
                     isSelected
-                        ? Color.blue.opacity(0.25)
-                        : Color(nsColor: .textBackgroundColor).opacity(0.18)
+                        ? LCCDesign.ColorToken.active.opacity(0.25)
+                        : LCCDesign.ColorToken.textBackground.opacity(0.18)
                 )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .strokeBorder(
                     isSelected
-                        ? Color.blue.opacity(0.5)
-                        : Color.white.opacity(0.08),
+                        ? LCCDesign.ColorToken.active.opacity(0.5)
+                        : LCCDesign.ColorToken.standardBorder,
                     lineWidth: 1
                 )
         )
@@ -974,13 +974,7 @@ struct ActionEditorView: View {
     // MARK: - Colors / Icons
 
     private func actionColor(for type: ActionType) -> Color {
-        switch type {
-        case .show:
-            return .blue
-
-        case .utility:
-            return .purple
-        }
+        LCCDesign.actionColor(for: type)
     }
 
     private func iconName(for kind: UtilityCommandKind) -> String {
@@ -1007,8 +1001,8 @@ struct ActionEditorView: View {
     private var editorBackground: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.58)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -1018,29 +1012,29 @@ struct ActionEditorView: View {
 
     private var editorCardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var editorCardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private var stepCardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.62))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.62))
             .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 
     private var stepCardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private var insetPanelBackground: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
+            .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
     }
 
     // MARK: - Message Step Actions

@@ -224,7 +224,7 @@ struct ActionsView: View {
 
     private var emptyDetailView: some View {
         ZStack {
-            Color(nsColor: .windowBackgroundColor)
+            LCCDesign.ColorToken.windowBackground
                 .ignoresSafeArea()
 
             VStack(spacing: 12) {
@@ -334,13 +334,7 @@ struct ActionsView: View {
     }
 
     private func actionColor(for action: ActionDefinition) -> Color {
-        switch action.type {
-        case .show:
-            return .blue
-
-        case .utility:
-            return .purple
-        }
+        LCCDesign.actionColor(for: action.type)
     }
 
     // MARK: - Empty State
@@ -353,11 +347,11 @@ struct ActionsView: View {
             .padding(.horizontal, 12)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+                    .fill(LCCDesign.ColorToken.controlBackground.opacity(0.55))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
             )
     }
 
@@ -366,8 +360,8 @@ struct ActionsView: View {
     private var sidebarBackground: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.65)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.65)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -379,8 +373,8 @@ struct ActionsView: View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(
                 isSelected
-                    ? Color.accentColor.opacity(0.22)
-                    : Color(nsColor: .controlBackgroundColor).opacity(0.62)
+                    ? LCCDesign.ColorToken.active.opacity(0.22)
+                    : LCCDesign.ColorToken.controlBackground.opacity(0.62)
             )
     }
 
@@ -388,8 +382,8 @@ struct ActionsView: View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
             .strokeBorder(
                 isSelected
-                    ? Color.accentColor.opacity(0.45)
-                    : Color.white.opacity(0.08),
+                    ? LCCDesign.selectedStroke()
+                    : LCCDesign.ColorToken.standardBorder,
                 lineWidth: 1
             )
     }

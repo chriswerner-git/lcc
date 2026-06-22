@@ -32,7 +32,7 @@ struct VolumeControlView: View {
     }
 
     private var volumeStatusColor: Color {
-        appState.isMuted ? .secondary : .blue
+        appState.isMuted ? .secondary : LCCDesign.ColorToken.active
     }
 
     private var sliderRange: ClosedRange<Double> {
@@ -137,7 +137,7 @@ struct VolumeControlView: View {
     private var mutedSliderPlaceholder: some View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color(nsColor: .textBackgroundColor).opacity(0.22))
+                .fill(LCCDesign.ColorToken.textBackground.opacity(0.22))
                 .frame(height: 6)
 
             RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -243,21 +243,21 @@ struct VolumeControlView: View {
 
     private var volumeCardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var volumeCardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private func buttonBackground(isProminent: Bool) -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(
                 isProminent
-                    ? Color.blue.opacity(0.26)
-                    : Color(nsColor: .textBackgroundColor).opacity(0.18)
+                    ? LCCDesign.ColorToken.active.opacity(0.26)
+                    : LCCDesign.ColorToken.textBackground.opacity(0.18)
             )
     }
 
@@ -265,8 +265,8 @@ struct VolumeControlView: View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .strokeBorder(
                 isProminent
-                    ? Color.blue.opacity(0.45)
-                    : Color.white.opacity(0.10),
+                    ? LCCDesign.selectedStroke()
+                    : LCCDesign.ColorToken.strongBorder,
                 lineWidth: 1
             )
     }

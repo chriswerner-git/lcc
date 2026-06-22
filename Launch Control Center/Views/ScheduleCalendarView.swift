@@ -217,8 +217,8 @@ struct ScheduleCalendarView: View {
     private var background: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.58)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -230,12 +230,12 @@ struct ScheduleCalendarView: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.18))
+                    .fill(LCCDesign.selectedFill())
                     .frame(width: 40, height: 40)
 
                 Image(systemName: "calendar")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -366,7 +366,7 @@ struct ScheduleCalendarView: View {
             HStack(spacing: 10) {
                 Label(seriesFilterTitle(for: filteredSeriesID), systemImage: "line.3.horizontal.decrease.circle")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
                     .lineLimit(1)
 
                 Spacer()
@@ -383,11 +383,11 @@ struct ScheduleCalendarView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.blue.opacity(0.10))
+                    .fill(LCCDesign.selectedFill(opacity: 0.10))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.blue.opacity(0.24), lineWidth: 1)
+                    .strokeBorder(LCCDesign.ColorToken.active.opacity(0.24), lineWidth: 1)
             )
         }
     }
@@ -440,7 +440,7 @@ struct ScheduleCalendarView: View {
                     title: "Disabled / Off",
                     value: "\(unavailableCount)",
                     systemImage: "exclamationmark.triangle.fill",
-                    foregroundStyle: AnyShapeStyle(Color.orange)
+                    foregroundStyle: AnyShapeStyle(LCCDesign.ColorToken.warning)
                 )
             }
 
@@ -467,11 +467,11 @@ struct ScheduleCalendarView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.44))
+                .fill(LCCDesign.ColorToken.controlBackground.opacity(0.44))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
         )
     }
 
@@ -507,11 +507,11 @@ struct ScheduleCalendarView: View {
         HStack(spacing: 7) {
             Image(systemName: "arrow.forward.circle.fill")
                 .font(.caption)
-                .foregroundStyle(.blue)
+                .foregroundStyle(LCCDesign.ColorToken.active)
 
             Text("Next")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.blue)
+                .foregroundStyle(LCCDesign.ColorToken.active)
 
             Text(ScheduleCalendarView.summaryTimeFormatter.string(from: occurrence.occurrenceDate))
                 .font(.caption.monospacedDigit())
@@ -530,11 +530,11 @@ struct ScheduleCalendarView: View {
         .padding(.vertical, 5)
         .background(
             Capsule()
-                .fill(Color.blue.opacity(0.10))
+                .fill(LCCDesign.selectedFill(opacity: 0.10))
         )
         .overlay(
             Capsule()
-                .strokeBorder(Color.blue.opacity(0.22), lineWidth: 1)
+                .strokeBorder(LCCDesign.ColorToken.active.opacity(0.22), lineWidth: 1)
         )
         .help("Next visible scheduled Event in the current range and filter.")
     }
@@ -655,20 +655,20 @@ struct ScheduleCalendarView: View {
         ZStack(alignment: .topLeading) {
             ForEach(0...24, id: \.self) { hour in
                 Rectangle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(LCCDesign.ColorToken.standardBorder)
                     .frame(width: width, height: 1)
                     .offset(y: CGFloat(hour) * hourRowHeight)
             }
 
             ForEach(0...dayCount, id: \.self) { column in
                 Rectangle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(LCCDesign.ColorToken.standardBorder)
                     .frame(width: 1, height: height)
                     .offset(x: timeColumnWidth + (CGFloat(column) * dayColumnWidth))
             }
 
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(LCCDesign.ColorToken.standardBorder)
                 .frame(width: 1, height: height)
                 .offset(x: timeColumnWidth)
         }
@@ -730,12 +730,12 @@ struct ScheduleCalendarView: View {
                     Text("Today")
                         .font(.caption2)
                         .bold()
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(LCCDesign.ColorToken.active)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(
                             Capsule()
-                                .fill(Color.blue.opacity(0.16))
+                                .fill(LCCDesign.selectedFill(opacity: 0.16))
                         )
                 }
 
@@ -761,7 +761,7 @@ struct ScheduleCalendarView: View {
                 .frame(width: timeColumnWidth, height: hourRowHeight, alignment: .topTrailing)
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.32))
+        .background(LCCDesign.ColorToken.controlBackground.opacity(0.32))
     }
 
     private func dayTimeColumn(
@@ -1636,32 +1636,32 @@ struct ScheduleCalendarView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private var headerBackground: some View {
-        Color(nsColor: .controlBackgroundColor).opacity(0.58)
+        LCCDesign.ColorToken.controlBackground.opacity(0.58)
     }
 
     private var gridBackground: some View {
-        Color(nsColor: .textBackgroundColor).opacity(0.08)
+        LCCDesign.ColorToken.textBackground.opacity(0.08)
     }
 
     private var verticalDivider: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.08))
+            .fill(LCCDesign.ColorToken.standardBorder)
             .frame(width: 1)
     }
 
     private var hourDivider: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.08))
+            .fill(LCCDesign.ColorToken.standardBorder)
             .frame(height: 1)
     }
 
@@ -1707,7 +1707,7 @@ private struct ScheduleListDaySection: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.44))
+            .background(LCCDesign.ColorToken.controlBackground.opacity(0.44))
 
             if group.occurrences.isEmpty {
                 Text("No scheduled Events.")
@@ -1716,7 +1716,7 @@ private struct ScheduleListDaySection: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 18)
-                    .background(Color.white.opacity(0.018))
+                    .background(LCCDesign.ColorToken.veryQuietSurface)
             } else {
                 VStack(spacing: 0) {
                     ForEach(group.occurrences) { occurrence in
@@ -1743,16 +1743,16 @@ private struct ScheduleListDaySection: View {
                         }
                     }
                 }
-                .background(Color.white.opacity(0.018))
+                .background(LCCDesign.ColorToken.veryQuietSurface)
             }
         }
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.52))
+                .fill(LCCDesign.ColorToken.controlBackground.opacity(0.52))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -1820,7 +1820,7 @@ private struct ScheduleListOccurrenceRow: View {
                     if occurrence.isNext {
                         statusPill(
                             title: "Next",
-                            color: .blue
+                            color: LCCDesign.ColorToken.active
                         )
                     }
                 }
@@ -1937,13 +1937,7 @@ private struct ScheduleListOccurrenceRow: View {
     }
 
     private var actionColor: Color {
-        switch occurrence.action.type {
-        case .show:
-            return .blue
-
-        case .utility:
-            return .purple
-        }
+        LCCDesign.actionColor(for: occurrence.action.type)
     }
 
     private var primaryTextStyle: AnyShapeStyle {
@@ -1955,7 +1949,7 @@ private struct ScheduleListOccurrenceRow: View {
     }
 
     private var seriesIconStyle: AnyShapeStyle {
-        occurrence.isPast ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.blue)
+        occurrence.isPast ? AnyShapeStyle(.tertiary) : AnyShapeStyle(LCCDesign.ColorToken.active)
     }
 
     private var seriesHelpText: String {
@@ -2011,7 +2005,7 @@ private struct ScheduleListOccurrenceRow: View {
         }
 
         if occurrence.event.enabled == false || occurrence.scheduleCategoryEnabled == false {
-            return .orange
+            return LCCDesign.ColorToken.warning
         }
 
         return .secondary
@@ -2041,13 +2035,13 @@ private struct ScheduleListOccurrenceRow: View {
 
         switch executionRecord.result {
         case .ran:
-            return .green
+            return LCCDesign.ColorToken.success
 
         case .skipped:
-            return .orange
+            return LCCDesign.ColorToken.warning
 
         case .failed:
-            return .red
+            return LCCDesign.ColorToken.error
         }
     }
 
@@ -2134,16 +2128,16 @@ private struct CompactScheduleEventChip: View {
             Spacer(minLength: 2)
 
             if occurrence.isNext {
-                compactPill(title: "Next", color: .blue)
+                compactPill(title: "Next", color: LCCDesign.ColorToken.active)
             } else if occurrence.isPast {
                 compactPill(
                     title: compactExecutionTitle,
                     color: compactExecutionColor
                 )
             } else if occurrence.event.enabled == false {
-                compactPill(title: "Disabled", color: .orange)
+                compactPill(title: "Disabled", color: LCCDesign.ColorToken.warning)
             } else if occurrence.scheduleCategoryEnabled == false {
-                compactPill(title: "Off", color: .orange)
+                compactPill(title: "Off", color: LCCDesign.ColorToken.warning)
             } else {
                 compactPill(title: occurrence.action.type.rawValue, color: actionColor)
             }
@@ -2245,17 +2239,11 @@ private struct CompactScheduleEventChip: View {
     }
 
     private var actionColor: Color {
-        switch occurrence.action.type {
-        case .show:
-            return .blue
-
-        case .utility:
-            return .purple
-        }
+        LCCDesign.actionColor(for: occurrence.action.type)
     }
 
     private var calendarDisplayColor: Color {
-        occurrence.isEffectivelyScheduled ? actionColor : .orange
+        occurrence.isEffectivelyScheduled ? actionColor : LCCDesign.ColorToken.warning
     }
 
     private var eventTextStyle: AnyShapeStyle {
@@ -2264,7 +2252,7 @@ private struct CompactScheduleEventChip: View {
         }
 
         if occurrence.isEffectivelyScheduled == false {
-            return AnyShapeStyle(Color.orange)
+            return AnyShapeStyle(LCCDesign.ColorToken.warning)
         }
 
         return AnyShapeStyle(.primary)
@@ -2294,13 +2282,13 @@ private struct CompactScheduleEventChip: View {
 
         switch executionRecord.result {
         case .ran:
-            return .green
+            return LCCDesign.ColorToken.success
 
         case .skipped:
-            return .orange
+            return LCCDesign.ColorToken.warning
 
         case .failed:
-            return .red
+            return LCCDesign.ColorToken.error
         }
     }
 
@@ -2312,7 +2300,7 @@ private struct CompactScheduleEventChip: View {
     private var chipBorder: some View {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
             .strokeBorder(
-                occurrence.isNext ? Color.blue.opacity(0.72) : calendarDisplayColor.opacity(0.30),
+                occurrence.isNext ? LCCDesign.ColorToken.active.opacity(0.72) : calendarDisplayColor.opacity(0.30),
                 lineWidth: occurrence.isNext ? 1.5 : 1
             )
     }
@@ -2375,12 +2363,12 @@ private struct MonthDayCell: View {
                     Text("Today")
                         .font(.caption2)
                         .bold()
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(LCCDesign.ColorToken.active)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
                             Capsule()
-                                .fill(Color.blue.opacity(0.16))
+                                .fill(LCCDesign.selectedFill(opacity: 0.16))
                         )
                 }
 
@@ -2420,11 +2408,11 @@ private struct MonthDayCell: View {
     }
 
     private var showCountColor: Color {
-        showHasDisabledOrOffEvent || showActionsEnabled == false ? .orange : .blue
+        showHasDisabledOrOffEvent || showActionsEnabled == false ? LCCDesign.ColorToken.warning : LCCDesign.ColorToken.showAction
     }
 
     private var utilityCountColor: Color {
-        utilityHasDisabledOrOffEvent || utilityActionsEnabled == false ? .orange : .purple
+        utilityHasDisabledOrOffEvent || utilityActionsEnabled == false ? LCCDesign.ColorToken.warning : LCCDesign.ColorToken.utilityAction
     }
 
     private func countPill(
@@ -2588,12 +2576,12 @@ private struct ScheduleEventEditSheet: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.18))
+                    .fill(LCCDesign.selectedFill())
                     .frame(width: 40, height: 40)
 
                 Image(systemName: occurrence.event.repeatsDaily ? "rectangle.stack.badge.pencil" : "calendar.badge.clock")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -2800,7 +2788,7 @@ private struct ScheduleEventEditSheet: View {
                 .foregroundStyle(.secondary)
         }
         .padding(8)
-        .background(Color.white.opacity(0.035))
+        .background(LCCDesign.ColorToken.quietSurface)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
@@ -3093,10 +3081,10 @@ private struct ScheduleEventEditSheet: View {
                 Text("Optional")
                     .font(.caption2)
                     .bold()
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.blue.opacity(0.14)))
+                    .background(Capsule().fill(LCCDesign.selectedFill(opacity: 0.14)))
             }
 
             TextField("Optional", text: $seriesName)
@@ -3154,7 +3142,7 @@ private struct ScheduleEventEditSheet: View {
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(LCCDesign.ColorToken.warning)
             }
         }
         .padding(10)
@@ -3187,7 +3175,7 @@ private struct ScheduleEventEditSheet: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
-        .tint(isSelected ? .blue : .secondary)
+        .tint(isSelected ? LCCDesign.ColorToken.active : .secondary)
     }
 
     private var seriesPreviewCard: some View {
@@ -3195,7 +3183,7 @@ private struct ScheduleEventEditSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "rectangle.stack")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
 
                 Text("Series Preview")
                     .font(.caption)
@@ -3229,13 +3217,13 @@ private struct ScheduleEventEditSheet: View {
                 if previewOccurrences.isEmpty {
                     Text("No occurrences are generated by these settings.")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(LCCDesign.ColorToken.warning)
                 } else {
                     ForEach(previewOccurrences, id: \.timeIntervalSince1970) { occurrenceDate in
                         HStack(spacing: 8) {
                             Image(systemName: "rectangle.stack")
                                 .font(.caption2)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(LCCDesign.ColorToken.active)
 
                             Text(Self.previewFormatter.string(from: occurrenceDate))
                                 .font(.caption2)
@@ -3557,7 +3545,7 @@ private struct ScheduleEventEditSheet: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: systemImage)
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
 
                 Text(title)
                     .font(.headline)
@@ -3603,8 +3591,8 @@ private struct ScheduleEventEditSheet: View {
     private var editSheetBackground: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.58)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -3614,18 +3602,18 @@ private struct ScheduleEventEditSheet: View {
 
     private var editCardBackground: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.14), radius: 7, x: 0, y: 3)
     }
 
     private var editCardBorder: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private var editInsetBackground: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
+            .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
     }
 
     private var footer: some View {
@@ -3849,10 +3837,10 @@ private struct ScheduleEditValidationIssue: Identifiable, Equatable {
         var color: Color {
             switch self {
             case .error:
-                return .red
+                return LCCDesign.ColorToken.error
 
             case .warning:
-                return .orange
+                return LCCDesign.ColorToken.warning
             }
         }
 

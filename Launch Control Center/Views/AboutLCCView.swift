@@ -59,12 +59,12 @@ struct AboutLaunchControlCenterView: View {
         HStack(alignment: .center, spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.18))
+                    .fill(LCCDesign.selectedFill())
                     .frame(width: 54, height: 54)
 
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 23, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -184,11 +184,11 @@ struct AboutLaunchControlCenterView: View {
             .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
+                    .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
             )
         }
         .padding(14)
@@ -315,7 +315,7 @@ struct AboutLaunchControlCenterView: View {
                 }
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.blue)
+            .foregroundStyle(LCCDesign.ColorToken.active)
             .help(value)
 
             Spacer()
@@ -325,8 +325,8 @@ struct AboutLaunchControlCenterView: View {
     private var background: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.58)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -336,12 +336,12 @@ struct AboutLaunchControlCenterView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 }

@@ -191,13 +191,13 @@ struct TodayScheduleView: View {
 
     private var todayCardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var todayCardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 }
 
@@ -246,16 +246,11 @@ struct ScheduleEntryRow: View {
     }
 
     private var actionTypeColor: Color {
-        switch action?.type {
-        case .show:
-            return .blue
-
-        case .utility:
-            return .purple
-
-        case .none:
+        guard let action else {
             return .secondary
         }
+
+        return LCCDesign.actionColor(for: action.type)
     }
 
     private var timeText: String {
@@ -328,7 +323,7 @@ struct ScheduleEntryRow: View {
 
     private var nextIndicator: some View {
         Circle()
-            .fill(isNext ? Color.blue : Color.clear)
+            .fill(isNext ? LCCDesign.ColorToken.active : Color.clear)
             .frame(width: 9, height: 9)
     }
 
@@ -364,7 +359,7 @@ struct ScheduleEntryRow: View {
             } else if isNext {
                 Text("Next")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
         }
     }
@@ -374,7 +369,7 @@ struct ScheduleEntryRow: View {
             .fill(
                 isPast
                     ? Color.black.opacity(0.14)
-                    : (isNext ? Color.blue.opacity(0.055) : Color.clear)
+                    : (isNext ? LCCDesign.ColorToken.active.opacity(0.055) : Color.clear)
             )
     }
 

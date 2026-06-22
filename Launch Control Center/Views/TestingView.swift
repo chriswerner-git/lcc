@@ -87,12 +87,12 @@ private struct TestingContentView: View {
         HStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.18))
+                    .fill(LCCDesign.selectedFill())
                     .frame(width: 34, height: 34)
 
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -227,13 +227,13 @@ private struct TestingContentView: View {
     private var listenerStatusColor: Color {
         switch udpService.listenerState {
         case .listening:
-            return .blue
+            return LCCDesign.ColorToken.active
 
         case .starting:
-            return .blue.opacity(0.7)
+            return LCCDesign.ColorToken.active.opacity(0.7)
 
         case .failed:
-            return .red
+            return LCCDesign.ColorToken.error
 
         case .stopped:
             return .secondary
@@ -243,26 +243,26 @@ private struct TestingContentView: View {
     private var listenerStatusBackgroundColor: Color {
         switch udpService.listenerState {
         case .listening:
-            return .blue.opacity(0.20)
+            return LCCDesign.ColorToken.active.opacity(0.20)
 
         case .starting:
-            return .blue.opacity(0.12)
+            return LCCDesign.ColorToken.active.opacity(0.12)
 
         case .failed:
-            return .red.opacity(0.18)
+            return LCCDesign.ColorToken.error.opacity(0.18)
 
         case .stopped:
-            return Color(nsColor: .textBackgroundColor).opacity(0.18)
+            return LCCDesign.ColorToken.textBackground.opacity(0.18)
         }
     }
 
     private var listenerStatusTextColor: Color {
         switch udpService.listenerState {
         case .listening, .starting:
-            return .blue
+            return LCCDesign.ColorToken.active
 
         case .failed:
-            return .red
+            return LCCDesign.ColorToken.error
 
         case .stopped:
             return .secondary
@@ -375,7 +375,7 @@ private struct TestingContentView: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
 
                 Text(title)
                     .font(.headline)
@@ -493,8 +493,8 @@ private struct TestingContentView: View {
     private var background: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.58)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -504,17 +504,17 @@ private struct TestingContentView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.14), radius: 7, x: 0, y: 3)
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private var insetPanelBackground: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
+            .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
     }
 }

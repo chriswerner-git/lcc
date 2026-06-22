@@ -238,13 +238,13 @@ private enum ClockDataStatus {
     var color: Color {
         switch self {
         case .fresh:
-            return .blue
+            return LCCDesign.ColorToken.active
 
         case .stale:
             return .yellow
 
         case .missing:
-            return .red
+            return LCCDesign.ColorToken.error
         }
     }
 }
@@ -323,7 +323,7 @@ struct ScheduleStatusView: View {
 
             Text(isEnabled ? "Enabled" : "Disabled")
                 .font(.caption)
-                .foregroundStyle(isEnabled ? .blue : .secondary)
+                .foregroundStyle(isEnabled ? LCCDesign.ColorToken.active : .secondary)
 
             Toggle(
                 "",
@@ -348,7 +348,7 @@ struct ScheduleStatusView: View {
 
     private func statusDot(isEnabled: Bool) -> some View {
         Circle()
-            .fill(isEnabled ? .blue : Color.secondary.opacity(0.45))
+            .fill(isEnabled ? LCCDesign.ColorToken.active : Color.secondary.opacity(0.45))
             .frame(width: 9, height: 9)
     }
 }
@@ -451,7 +451,7 @@ struct EventSummaryView: View {
 
                 Text("Starts in \(countdown(to: next.occurrenceDate, from: now))")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
                     .lineLimit(1)
             } else {
                 Text("No upcoming enabled Event")
@@ -873,13 +873,13 @@ private enum DashboardScheduleOccurrenceResolver {
 
 private var dashboardCardBackground: some View {
     RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+        .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
         .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
 }
 
 private var dashboardCardBorder: some View {
     RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
 }
 
 

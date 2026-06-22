@@ -48,12 +48,12 @@ struct HelpLCCView: View {
         HStack(alignment: .center, spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.18))
+                    .fill(LCCDesign.selectedFill())
                     .frame(width: 54, height: 54)
 
                 Image(systemName: "questionmark.circle.fill")
                     .font(.system(size: 25, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -230,7 +230,7 @@ struct HelpLCCView: View {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
                     .frame(width: 22)
 
                 Text(title)
@@ -261,7 +261,7 @@ struct HelpLCCView: View {
             ForEach(items, id: \.self) { item in
                 HStack(alignment: .top, spacing: 8) {
                     Text("•")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(LCCDesign.ColorToken.active)
 
                     Text(item)
                         .font(.body)
@@ -276,8 +276,8 @@ struct HelpLCCView: View {
     private var background: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.58)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -287,12 +287,12 @@ struct HelpLCCView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 }

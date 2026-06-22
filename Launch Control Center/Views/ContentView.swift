@@ -67,8 +67,8 @@ struct ContentView: View {
     private var dashboardBackground: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.65)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.65)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -78,7 +78,7 @@ struct ContentView: View {
 
     private var dashboardDivider: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.10))
+            .fill(LCCDesign.ColorToken.strongBorder)
             .frame(height: 1)
             .padding(.vertical, 2)
     }
@@ -303,7 +303,7 @@ private struct ManualActionButtonsView: View {
             .padding(.horizontal, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
+                    .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
             )
     }
 
@@ -345,17 +345,17 @@ private struct ManualActionButtonsView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 5)
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private func buttonBackground(for type: ActionType) -> some View {
-        let baseColor: Color = type == .show ? .blue : .purple
+        let baseColor = LCCDesign.actionColor(for: type)
 
         return RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(baseColor.opacity(0.18))
@@ -363,7 +363,7 @@ private struct ManualActionButtonsView: View {
 
     private var buttonBorder: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.strongBorder, lineWidth: 1)
     }
 }
 

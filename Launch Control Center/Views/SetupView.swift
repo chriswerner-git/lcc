@@ -52,8 +52,8 @@ struct SetupView: View {
     private var setupBackground: some View {
         LinearGradient(
             colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .controlBackgroundColor).opacity(0.58)
+                LCCDesign.ColorToken.windowBackground,
+                LCCDesign.ColorToken.controlBackground.opacity(0.58)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -78,7 +78,7 @@ struct SetupView: View {
         .padding(16)
         .frame(width: 210)
         .background(
-            Color(nsColor: .controlBackgroundColor)
+            LCCDesign.ColorToken.controlBackground
                 .opacity(0.30)
         )
     }
@@ -87,12 +87,12 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.18))
+                    .fill(LCCDesign.selectedFill())
                     .frame(width: 42, height: 42)
 
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -132,12 +132,12 @@ struct SetupView: View {
         .foregroundStyle(selectedCategory == category ? .primary : .secondary)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(selectedCategory == category ? Color.blue.opacity(0.18) : Color.clear)
+                .fill(selectedCategory == category ? LCCDesign.selectedFill() : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(
-                    selectedCategory == category ? Color.blue.opacity(0.35) : Color.clear,
+                    selectedCategory == category ? LCCDesign.ColorToken.active.opacity(0.35) : Color.clear,
                     lineWidth: 1
                 )
         )
@@ -182,12 +182,12 @@ struct SetupView: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.18))
+                    .fill(LCCDesign.selectedFill())
                     .frame(width: 40, height: 40)
 
                 Image(systemName: selectedCategory.systemImage)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -391,7 +391,7 @@ struct SetupView: View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.blue)
+                .foregroundStyle(LCCDesign.ColorToken.active)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -456,11 +456,11 @@ struct SetupView: View {
                     .padding(8)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(nsColor: .textBackgroundColor).opacity(0.22))
+                            .fill(LCCDesign.ColorToken.textBackground.opacity(0.22))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
                     )
 
                 Text("Stored with this project and included in configuration import/export.")
@@ -633,12 +633,12 @@ struct SetupView: View {
             HStack(alignment: .center, spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.blue.opacity(0.16))
+                        .fill(LCCDesign.selectedFill(opacity: 0.16))
                         .frame(width: 32, height: 32)
 
                     Image(systemName: systemImage)
                         .font(.caption)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(LCCDesign.ColorToken.active)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -677,7 +677,7 @@ struct SetupView: View {
             HStack(spacing: 12) {
                 Image(systemName: "externaldrive.fill")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Full Configuration File")
@@ -741,7 +741,7 @@ struct SetupView: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(LCCDesign.ColorToken.warning)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -813,7 +813,7 @@ struct SetupView: View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(operation.isDestructive ? .red : .blue)
+                .foregroundStyle(operation.isDestructive ? LCCDesign.ColorToken.error : LCCDesign.ColorToken.active)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -836,7 +836,7 @@ struct SetupView: View {
                     .frame(width: 132)
             }
             .buttonStyle(.bordered)
-            .tint(operation.isDestructive ? .red : .blue)
+            .tint(operation.isDestructive ? LCCDesign.ColorToken.error : LCCDesign.ColorToken.active)
             .controlSize(.small)
         }
         .padding(12)
@@ -1141,18 +1141,18 @@ struct SetupView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 
     private var insetPanelBackground: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
+            .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
     }
 }
 
@@ -1293,6 +1293,5 @@ private enum ResetOperation {
         }
     }
 }
-
 
 
