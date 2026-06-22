@@ -29,6 +29,7 @@ struct ScheduleCalendarView: View {
 
     @State private var selectedPresentationMode: SchedulePresentationMode = .calendar
     @State private var selectedRangeMode: ScheduleRangeMode = .week
+    @State private var selectedEventFilter: ScheduleEventFilter = .all
 
     @State private var visibleDayDate: Date = Date()
     @State private var visibleWeekStart: Date = ScheduleCalendarView.startOfWeek(
@@ -317,6 +318,24 @@ struct ScheduleCalendarView: View {
             }
 
             HStack(spacing: 10) {
+                Text("Filter")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Filter", selection: $selectedEventFilter) {
+                    ForEach(ScheduleEventFilter.allCases) { filter in
+                        Label(filter.title, systemImage: filter.systemImage)
+                            .tag(filter)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 190)
+                .help(selectedEventFilter.helpText)
+
+                Divider()
+                    .frame(height: 22)
+
                 if selectedPresentationMode == .calendar && selectedRangeMode != .month {
                     Text("Hour Height")
                         .font(.caption)
@@ -1072,13 +1091,23 @@ struct ScheduleCalendarView: View {
                 return []
             }
 
+            let categoryEnabled = scheduleCategoryIsEnabled(for: action)
+
+            guard eventPassesSelectedFilter(
+                event: event,
+                action: action,
+                scheduleCategoryEnabled: categoryEnabled
+            ) else {
+                return []
+            }
+
             return occurrenceDates.map { occurrenceDate in
                 var occurrence = ScheduleOccurrence(
                     event: event,
                     action: action,
                     occurrenceDate: occurrenceDate,
                     isPast: occurrenceDate < now,
-                    scheduleCategoryEnabled: scheduleCategoryIsEnabled(for: action),
+                    scheduleCategoryEnabled: categoryEnabled,
                     executionRecord: appState.scheduleExecutionRecord(
                         for: event.id,
                         occurrenceDate: occurrenceDate
@@ -1157,7 +1186,17 @@ struct ScheduleCalendarView: View {
                     return []
                 }
 
-                guard scheduleCategoryIsEnabled(for: action) else {
+                let categoryEnabled = scheduleCategoryIsEnabled(for: action)
+
+                guard categoryEnabled else {
+                    return []
+                }
+
+                guard eventPassesSelectedFilter(
+                    event: event,
+                    action: action,
+                    scheduleCategoryEnabled: categoryEnabled
+                ) else {
                     return []
                 }
 
@@ -1183,6 +1222,32 @@ struct ScheduleCalendarView: View {
             .sorted { $0.occurrenceDate < $1.occurrenceDate }
             .first?
             .id
+    }
+
+    private func eventPassesSelectedFilter(
+        event: ScheduleEntry,
+        action: ActionDefinition,
+        scheduleCategoryEnabled: Bool
+    ) -> Bool {
+        switch selectedEventFilter {
+        case .all:
+            return true
+
+        case .standalone:
+            return event.repeatsDaily == false
+
+        case .recurring:
+            return event.repeatsDaily
+
+        case .show:
+            return action.type == .show
+
+        case .utility:
+            return action.type == .utility
+
+        case .disabledOrOff:
+            return event.enabled == false || scheduleCategoryEnabled == false
+        }
     }
 
     private func scheduleCategoryIsEnabled(for action: ActionDefinition) -> Bool {
@@ -3640,6 +3705,85 @@ private enum ScheduleRangeMode: String, CaseIterable, Identifiable {
 
     var id: String {
         rawValue
+    }
+}
+
+private enum ScheduleEventFilter: String, CaseIterable, Identifiable {
+    case all
+    case standalone
+    case recurring
+    case show
+    case utility
+    case disabledOrOff
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "All Events"
+
+        case .standalone:
+            return "Standalone"
+
+        case .recurring:
+            return "Recurring Series"
+
+        case .show:
+            return "Show Events"
+
+        case .utility:
+            return "Utility Events"
+
+        case .disabledOrOff:
+            return "Disabled / Off"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all:
+            return "calendar"
+
+        case .standalone:
+            return "calendar.day.timeline.left"
+
+        case .recurring:
+            return "rectangle.stack"
+
+        case .show:
+            return "play.rectangle"
+
+        case .utility:
+            return "bolt.fill"
+
+        case .disabledOrOff:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .all:
+            return "Show all scheduled Events in the selected range."
+
+        case .standalone:
+            return "Show one-time standalone Events only."
+
+        case .recurring:
+            return "Show generated instances from recurring Event series only."
+
+        case .show:
+            return "Show Events linked to Show Actions."
+
+        case .utility:
+            return "Show Events linked to Utility Actions."
+
+        case .disabledOrOff:
+            return "Show Events that are disabled or unavailable because their Action category is off."
+        }
     }
 }
 
