@@ -129,6 +129,7 @@ struct ScheduleCalendarView: View {
                 header
                 topControls
                 seriesFilterBanner
+                scheduleRangeSummary
 
                 switch selectedPresentationMode {
                 case .calendar:
@@ -389,6 +390,163 @@ struct ScheduleCalendarView: View {
                     .strokeBorder(Color.blue.opacity(0.24), lineWidth: 1)
             )
         }
+    }
+
+
+    private var scheduleRangeSummary: some View {
+        let occurrences = visibleSummaryOccurrences
+        let totalCount = occurrences.count
+        let recurringCount = occurrences.filter { $0.event.repeatsDaily }.count
+        let standaloneCount = max(totalCount - recurringCount, 0)
+        let showCount = occurrences.filter { $0.action.type == .show }.count
+        let utilityCount = occurrences.filter { $0.action.type == .utility }.count
+        let unavailableCount = occurrences.filter { $0.isEffectivelyScheduled == false }.count
+        let pastCount = occurrences.filter { $0.isPast }.count
+        let nextOccurrence = occurrences.first(where: { $0.isNext })
+
+        return HStack(spacing: 10) {
+            scheduleSummaryMetric(
+                title: "Events",
+                value: "\(totalCount)",
+                systemImage: "calendar"
+            )
+
+            scheduleSummaryMetric(
+                title: "Recurring",
+                value: "\(recurringCount)",
+                systemImage: "rectangle.stack"
+            )
+
+            scheduleSummaryMetric(
+                title: "Standalone",
+                value: "\(standaloneCount)",
+                systemImage: "calendar.badge.clock"
+            )
+
+            scheduleSummaryMetric(
+                title: "Show",
+                value: "\(showCount)",
+                systemImage: "play.rectangle"
+            )
+
+            scheduleSummaryMetric(
+                title: "Utility",
+                value: "\(utilityCount)",
+                systemImage: "bolt.fill"
+            )
+
+            if unavailableCount > 0 {
+                scheduleSummaryMetric(
+                    title: "Disabled / Off",
+                    value: "\(unavailableCount)",
+                    systemImage: "exclamationmark.triangle.fill",
+                    foregroundStyle: AnyShapeStyle(Color.orange)
+                )
+            }
+
+            if pastCount > 0 {
+                scheduleSummaryMetric(
+                    title: "Past",
+                    value: "\(pastCount)",
+                    systemImage: "clock.arrow.circlepath",
+                    foregroundStyle: AnyShapeStyle(Color.secondary)
+                )
+            }
+
+            Spacer(minLength: 8)
+
+            if let nextOccurrence {
+                nextOccurrenceSummary(occurrence: nextOccurrence)
+            } else {
+                Label("No upcoming Events in this view", systemImage: "calendar.badge.exclamationmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.44))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func scheduleSummaryMetric(
+        title: String,
+        value: String,
+        systemImage: String,
+        foregroundStyle: AnyShapeStyle = AnyShapeStyle(Color.primary)
+    ) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(foregroundStyle)
+
+            Text(value)
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(foregroundStyle)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .lineLimit(1)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.045))
+        )
+    }
+
+    private func nextOccurrenceSummary(occurrence: ScheduleOccurrence) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "arrow.forward.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.blue)
+
+            Text("Next")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.blue)
+
+            Text(ScheduleCalendarView.summaryTimeFormatter.string(from: occurrence.occurrenceDate))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.primary)
+
+            Text("—")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Text(summaryDisplayName(for: occurrence))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(Color.blue.opacity(0.10))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.blue.opacity(0.22), lineWidth: 1)
+        )
+        .help("Next visible scheduled Event in the current range and filter.")
+    }
+
+    private func summaryDisplayName(for occurrence: ScheduleOccurrence) -> String {
+        let trimmedSeriesName = occurrence.event.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if occurrence.event.repeatsDaily, trimmedSeriesName.isEmpty == false {
+            return trimmedSeriesName
+        }
+
+        return occurrence.action.name
     }
 
     private var previousButtonTitle: String {
@@ -1260,6 +1418,38 @@ struct ScheduleCalendarView: View {
         }
     }
 
+    private var visibleSummaryOccurrences: [ScheduleOccurrence] {
+        let daysToSummarize: [Date]
+
+        switch selectedRangeMode {
+        case .day:
+            daysToSummarize = [Calendar.current.startOfDay(for: visibleDayDate)]
+
+        case .week:
+            daysToSummarize = weekDays
+
+        case .month:
+            daysToSummarize = actualMonthDays
+        }
+
+        let occurrences = daysToSummarize.flatMap { day in
+            eventOccurrences(on: day)
+        }
+
+        var seenIDs = Set<String>()
+        return occurrences.filter { occurrence in
+            if seenIDs.contains(occurrence.id) {
+                return false
+            }
+
+            seenIDs.insert(occurrence.id)
+            return true
+        }
+        .sorted {
+            $0.occurrenceDate < $1.occurrenceDate
+        }
+    }
+
     // MARK: - Navigation / Formatting
 
     private func normalizeRangeForCurrentPresentation() {
@@ -1413,6 +1603,12 @@ struct ScheduleCalendarView: View {
     private static let monthYearFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }()
+
+    private static let summaryTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, MMM d • HH:mm:ss"
         return formatter
     }()
 
