@@ -62,6 +62,59 @@ enum DockIconVisibilityPreference: String, CaseIterable, Identifiable {
     }
 }
 
+
+// MARK: - Schedule Execution History
+
+enum ScheduleExecutionResult: String, Codable {
+    case ran
+    case skipped
+    case failed
+
+    var displayName: String {
+        switch self {
+        case .ran:
+            return "Ran"
+
+        case .skipped:
+            return "Skipped"
+
+        case .failed:
+            return "Failed"
+        }
+    }
+}
+
+struct ScheduleExecutionRecord: Identifiable, Codable {
+    var id: UUID = UUID()
+    var eventID: UUID
+    var occurrenceKey: String
+    var scheduledDate: Date
+    var actualDate: Date?
+    var result: ScheduleExecutionResult
+    var message: String
+    var recordedAt: Date = Date()
+
+    init(
+        id: UUID = UUID(),
+        eventID: UUID,
+        occurrenceKey: String,
+        scheduledDate: Date,
+        actualDate: Date?,
+        result: ScheduleExecutionResult,
+        message: String,
+        recordedAt: Date = Date()
+    ) {
+        self.id = id
+        self.eventID = eventID
+        self.occurrenceKey = occurrenceKey
+        self.scheduledDate = scheduledDate
+        self.actualDate = actualDate
+        self.result = result
+        self.message = message
+        self.recordedAt = recordedAt
+    }
+}
+
 final class AppState: ObservableObject {
     let udpService = UDPService()
 
@@ -84,6 +137,7 @@ final class AppState: ObservableObject {
 
     private let processedScheduleOccurrenceDailyLimit: Int = 1_000
     private let processedScheduleOccurrenceTotalLimit: Int = 10_000
+    private let scheduleExecutionHistoryRetentionDays: Int = 60
 
     // Tracks Actions currently executing so the same Action cannot overlap itself.
     private var runningActionIDs: Set<UUID> = []
@@ -275,6 +329,10 @@ final class AppState: ObservableObject {
         didSet { PersistenceService.shared.saveScheduleEntries(scheduleEntries) }
     }
 
+    @Published private(set) var scheduleExecutionHistory: [ScheduleExecutionRecord] = [] {
+        didSet { PersistenceService.shared.saveScheduleExecutionHistory(scheduleExecutionHistory) }
+    }
+
     // MARK: - Init
 
     init() {
@@ -320,6 +378,8 @@ final class AppState: ObservableObject {
         self.actionDefinitions = PersistenceService.shared.loadActionDefinitions()
         self.scheduledEvents = PersistenceService.shared.loadScheduledEvents()
         self.scheduleEntries = PersistenceService.shared.loadScheduleEntries()
+        self.scheduleExecutionHistory = PersistenceService.shared.loadScheduleExecutionHistory()
+        pruneScheduleExecutionHistory(now: Date())
 
         purgeOldOperationalLogs()
 
@@ -552,7 +612,7 @@ final class AppState: ObservableObject {
 
         logger.info(
             """
-            Daily health check. App uptime: \(formattedDuration(appUptime)). Computer uptime: \(formattedDuration(computerUptime)). Actions: \(actionDefinitions.count). Saved scheduled Events: \(scheduledEvents.count). Schedule entries: \(scheduleEntries.count). Running Actions: \(runningActionIDs.count). Processed occurrences today: \(processedScheduleOccurrences.count). Processed occurrences total: \(processedScheduleOccurrenceTotalCount). UDP listener: \(udpService.listenerState.rawValue). Sleep prevention active: \(sleepPreventionService.isActive).
+            Daily health check. App uptime: \(formattedDuration(appUptime)). Computer uptime: \(formattedDuration(computerUptime)). Actions: \(actionDefinitions.count). Saved scheduled Events: \(scheduledEvents.count). Schedule entries: \(scheduleEntries.count). Running Actions: \(runningActionIDs.count). Processed occurrences today: \(processedScheduleOccurrences.count). Processed occurrences total: \(processedScheduleOccurrenceTotalCount). Execution history records: \(scheduleExecutionHistory.count). UDP listener: \(udpService.listenerState.rawValue). Sleep prevention active: \(sleepPreventionService.isActive).
             """
         )
     }
@@ -791,13 +851,14 @@ final class AppState: ObservableObject {
     }
 
     @MainActor
+    @discardableResult
     private func executeAction(
         _ action: ActionDefinition,
         source: ActionRunSource,
         visitedActionIDs: Set<UUID>
-    ) async {
+    ) async -> Bool {
         guard beginActionRun(action, source: source) else {
-            return
+            return false
         }
 
         defer {
@@ -839,7 +900,7 @@ final class AppState: ObservableObject {
         }
 
         guard completed else {
-            return
+            return false
         }
 
         let timestamp = formattedEventTimestamp(Date())
@@ -858,6 +919,7 @@ final class AppState: ObservableObject {
         lastEventMessage = "\(timestamp) — \(action.name)"
         controlStatus = runningActionIDs.count > 1 ? .sending : .idle
         logger.info(lastMessage)
+        return true
     }
 
     @MainActor
@@ -1093,7 +1155,7 @@ final class AppState: ObservableObject {
         var updatedVisitedActionIDs = visitedActionIDs
         updatedVisitedActionIDs.insert(actionID)
 
-        await executeAction(
+        _ = await executeAction(
             targetAction,
             source: .automated,
             visitedActionIDs: updatedVisitedActionIDs
@@ -1365,17 +1427,131 @@ final class AppState: ObservableObject {
         }) else {
             lastMessage = "Skipped scheduled Event: missing Action"
             logger.warning(lastMessage)
+            recordScheduleExecution(
+                event: event,
+                occurrenceDate: occurrenceDate,
+                result: .skipped,
+                message: "Missing Action"
+            )
             return
         }
 
         guard scheduledActionIsAllowed(action) else {
-            lastMessage = "Skipped scheduled Action: \(action.name)"
+            lastMessage = "Skipped scheduled Event: \(action.name)"
             logger.warning(lastMessage)
+            recordScheduleExecution(
+                event: event,
+                occurrenceDate: occurrenceDate,
+                result: .skipped,
+                message: scheduleDisabledMessage(for: action)
+            )
             return
         }
 
         logger.info("Running scheduled Action: \(action.name)")
-        runAction(action, source: .scheduled)
+        runScheduledEvent(
+            event,
+            action: action,
+            occurrenceDate: occurrenceDate
+        )
+    }
+
+    private func runScheduledEvent(
+        _ event: ScheduleEntry,
+        action: ActionDefinition,
+        occurrenceDate: Date
+    ) {
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            let completed = await self.executeAction(
+                action,
+                source: .scheduled,
+                visitedActionIDs: Set([action.id])
+            )
+
+            await MainActor.run {
+                self.recordScheduleExecution(
+                    event: event,
+                    occurrenceDate: occurrenceDate,
+                    result: completed ? .ran : .failed,
+                    message: completed ? "Ran" : "Failed"
+                )
+            }
+        }
+    }
+
+    private func recordScheduleExecution(
+        event: ScheduleEntry,
+        occurrenceDate: Date,
+        result: ScheduleExecutionResult,
+        message: String
+    ) {
+        let occurrenceKey = scheduleExecutionOccurrenceKey(
+            eventID: event.id,
+            occurrenceDate: occurrenceDate
+        )
+
+        let record = ScheduleExecutionRecord(
+            eventID: event.id,
+            occurrenceKey: occurrenceKey,
+            scheduledDate: occurrenceDate,
+            actualDate: result == .ran ? Date() : nil,
+            result: result,
+            message: message
+        )
+
+        scheduleExecutionHistory.removeAll { existingRecord in
+            existingRecord.occurrenceKey == occurrenceKey
+        }
+
+        scheduleExecutionHistory.append(record)
+        pruneScheduleExecutionHistory(now: Date())
+    }
+
+    func scheduleExecutionRecord(
+        for eventID: UUID,
+        occurrenceDate: Date
+    ) -> ScheduleExecutionRecord? {
+        let occurrenceKey = scheduleExecutionOccurrenceKey(
+            eventID: eventID,
+            occurrenceDate: occurrenceDate
+        )
+
+        return scheduleExecutionHistory.first { record in
+            record.occurrenceKey == occurrenceKey
+        }
+    }
+
+    private func scheduleExecutionOccurrenceKey(
+        eventID: UUID,
+        occurrenceDate: Date
+    ) -> String {
+        "\(eventID.uuidString)-\(Int(occurrenceDate.timeIntervalSince1970))"
+    }
+
+    private func scheduleDisabledMessage(for action: ActionDefinition) -> String {
+        switch action.type {
+        case .show:
+            return "Show Actions Off"
+
+        case .utility:
+            return "Utility Actions Off"
+        }
+    }
+
+    private func pruneScheduleExecutionHistory(now: Date) {
+        let cutoffDate = Calendar.current.date(
+            byAdding: .day,
+            value: -scheduleExecutionHistoryRetentionDays,
+            to: now
+        ) ?? now.addingTimeInterval(-TimeInterval(scheduleExecutionHistoryRetentionDays) * 86_400)
+
+        scheduleExecutionHistory.removeAll { record in
+            record.scheduledDate < cutoffDate
+        }
     }
 
     private func processedOccurrenceLimitsAllowProcessing(now: Date) -> Bool {

@@ -770,6 +770,10 @@ struct ScheduleCalendarView: View {
                 occurrenceDate: occurrenceDate,
                 isPast: occurrenceDate < now,
                 scheduleCategoryEnabled: scheduleCategoryIsEnabled(for: action),
+                executionRecord: appState.scheduleExecutionRecord(
+                    for: event.id,
+                    occurrenceDate: occurrenceDate
+                ),
                 isNext: false
             )
 
@@ -839,6 +843,10 @@ struct ScheduleCalendarView: View {
                     occurrenceDate: occurrenceDate,
                     isPast: occurrenceDate < now,
                     scheduleCategoryEnabled: true,
+                    executionRecord: appState.scheduleExecutionRecord(
+                        for: event.id,
+                        occurrenceDate: occurrenceDate
+                    ),
                     isNext: false
                 )
             }
@@ -1366,6 +1374,10 @@ private struct ScheduleListOccurrenceRow: View {
     }
 
     private var eventStatusText: String {
+        if occurrence.isPast {
+            return pastExecutionStatusText
+        }
+
         if occurrence.event.enabled == false {
             return "Disabled"
         }
@@ -1380,19 +1392,53 @@ private struct ScheduleListOccurrenceRow: View {
             }
         }
 
-        if occurrence.isPast {
-            return "Past"
-        }
-
         return "Enabled"
     }
 
     private var eventStatusColor: Color {
+        if occurrence.isPast {
+            return pastExecutionStatusColor
+        }
+
         if occurrence.event.enabled == false || occurrence.scheduleCategoryEnabled == false {
             return .orange
         }
 
-        return occurrence.isPast ? .secondary : .secondary
+        return .secondary
+    }
+
+    private var pastExecutionStatusText: String {
+        guard let executionRecord = occurrence.executionRecord else {
+            return "No Record"
+        }
+
+        switch executionRecord.result {
+        case .ran:
+            return "Ran"
+
+        case .skipped:
+            return "Skipped: \(executionRecord.message)"
+
+        case .failed:
+            return "Failed"
+        }
+    }
+
+    private var pastExecutionStatusColor: Color {
+        guard let executionRecord = occurrence.executionRecord else {
+            return .secondary
+        }
+
+        switch executionRecord.result {
+        case .ran:
+            return .green
+
+        case .skipped:
+            return .orange
+
+        case .failed:
+            return .red
+        }
     }
 
     private var repeatSummary: String {
@@ -1507,6 +1553,11 @@ private struct CompactScheduleEventChip: View {
 
             if occurrence.isNext {
                 compactPill(title: "Next", color: .blue)
+            } else if occurrence.isPast {
+                compactPill(
+                    title: compactExecutionTitle,
+                    color: compactExecutionColor
+                )
             } else if occurrence.event.enabled == false {
                 compactPill(title: "Disabled", color: .orange)
             } else if occurrence.scheduleCategoryEnabled == false {
@@ -1560,6 +1611,40 @@ private struct CompactScheduleEventChip: View {
 
         case .utility:
             return .purple
+        }
+    }
+
+    private var compactExecutionTitle: String {
+        guard let executionRecord = occurrence.executionRecord else {
+            return "No Rec"
+        }
+
+        switch executionRecord.result {
+        case .ran:
+            return "Ran"
+
+        case .skipped:
+            return "Skipped"
+
+        case .failed:
+            return "Failed"
+        }
+    }
+
+    private var compactExecutionColor: Color {
+        guard let executionRecord = occurrence.executionRecord else {
+            return .secondary
+        }
+
+        switch executionRecord.result {
+        case .ran:
+            return .green
+
+        case .skipped:
+            return .orange
+
+        case .failed:
+            return .red
         }
     }
 
@@ -2031,6 +2116,7 @@ private struct ScheduleOccurrence: Identifiable {
     let occurrenceDate: Date
     let isPast: Bool
     let scheduleCategoryEnabled: Bool
+    let executionRecord: ScheduleExecutionRecord?
     var isNext: Bool
 
     var isEffectivelyScheduled: Bool {

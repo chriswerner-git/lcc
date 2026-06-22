@@ -23,6 +23,7 @@ final class PersistenceService {
 
     private let actionsKey = "actions"
     private let scheduleEntriesKey = "scheduleEntries"
+    private let scheduleExecutionHistoryKey = "scheduleExecutionHistory"
 
     // Legacy model key. Retained while older saved data may still exist.
     private let scheduledEventsKey = "scheduledEvents"
@@ -75,6 +76,30 @@ final class PersistenceService {
         }
     }
 
+    // MARK: - Schedule Execution History
+
+    func saveScheduleExecutionHistory(_ records: [ScheduleExecutionRecord]) {
+        do {
+            let data = try JSONEncoder().encode(records)
+            UserDefaults.standard.set(data, forKey: scheduleExecutionHistoryKey)
+        } catch {
+            print("Failed to save Schedule Execution History: \(error)")
+        }
+    }
+
+    func loadScheduleExecutionHistory() -> [ScheduleExecutionRecord] {
+        guard let data = UserDefaults.standard.data(forKey: scheduleExecutionHistoryKey) else {
+            return []
+        }
+
+        do {
+            return try JSONDecoder().decode([ScheduleExecutionRecord].self, from: data)
+        } catch {
+            print("Failed to load Schedule Execution History: \(error)")
+            return []
+        }
+    }
+
     // MARK: - Legacy Scheduled Events
 
     func saveScheduledEvents(_ events: [ScheduledEvent]) {
@@ -99,3 +124,4 @@ final class PersistenceService {
         }
     }
 }
+
