@@ -505,20 +505,36 @@ struct SetupView: View {
                     .foregroundStyle(.secondary)
             }
 
-            HStack(alignment: .top, spacing: 12) {
-                labeledDoubleField(
-                    label: "Output at 0%",
-                    value: $appState.volumeOutputMinimum,
-                    width: 140
-                )
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Dashboard Slider Range")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                labeledDoubleField(
-                    label: "Output at 100%",
-                    value: $appState.volumeOutputMaximum,
-                    width: 140
-                )
+                HStack(alignment: .top, spacing: 12) {
+                    labeledDoubleField(
+                        label: "Slider Minimum",
+                        value: $appState.volumeOutputMinimum,
+                        width: 150
+                    )
 
-                Spacer()
+                    labeledDoubleField(
+                        label: "Slider Maximum",
+                        value: $appState.volumeOutputMaximum,
+                        width: 150
+                    )
+
+                    labeledDoubleField(
+                        label: "Mute Level",
+                        value: $appState.volumeMuteLevel,
+                        width: 150
+                    )
+
+                    Spacer()
+                }
+
+                Text("Mute Level may sit outside the slider range. Changes send the current volume message immediately.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             volumeOutputPreview
@@ -536,9 +552,10 @@ struct SetupView: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 6) {
-                previewLine(percent: 0)
-                previewLine(percent: 50)
-                previewLine(percent: 100)
+                previewLine(label: "Mute", value: appState.volumeMuteLevel)
+                previewLine(label: "Min", value: appState.volumeSliderLowerBound)
+                previewLine(label: "50%", value: appState.scaledVolumeOutputValue(for: 0.5))
+                previewLine(label: "Max", value: appState.volumeSliderUpperBound)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -547,13 +564,11 @@ struct SetupView: View {
         }
     }
 
-    private func previewLine(percent: Int) -> some View {
-        let level = Double(percent) / 100
-        let scaledValue = scaledPreviewValue(for: level)
-        let formattedValue = formattedPreviewValue(scaledValue)
+    private func previewLine(label: String, value: Double) -> some View {
+        let formattedValue = appState.formattedVolumeOutputValue(value)
 
         return HStack {
-            Text("\(percent)%")
+            Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 42, alignment: .leading)
@@ -566,23 +581,6 @@ struct SetupView: View {
 
             Spacer()
         }
-    }
-
-    private func scaledPreviewValue(for level: Double) -> Double {
-        let clampedLevel = min(max(level, 0), 1)
-        let outputRange = appState.volumeOutputMaximum - appState.volumeOutputMinimum
-
-        return appState.volumeOutputMinimum + (clampedLevel * outputRange)
-    }
-
-    private func formattedPreviewValue(_ value: Double) -> String {
-        let roundedValue = (value * 1000).rounded() / 1000
-
-        if roundedValue.rounded() == roundedValue {
-            return String(Int(roundedValue))
-        }
-
-        return String(roundedValue)
     }
 
     // MARK: - Volume Presets

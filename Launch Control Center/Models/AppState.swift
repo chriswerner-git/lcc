@@ -326,11 +326,24 @@ final class AppState: ObservableObject {
     }
 
     @Published var volumeOutputMinimum: Double {
-        didSet { UserDefaults.standard.set(volumeOutputMinimum, forKey: "volumeOutputMinimum") }
+        didSet {
+            UserDefaults.standard.set(volumeOutputMinimum, forKey: "volumeOutputMinimum")
+            handleVolumePreferenceChange()
+        }
     }
 
     @Published var volumeOutputMaximum: Double {
-        didSet { UserDefaults.standard.set(volumeOutputMaximum, forKey: "volumeOutputMaximum") }
+        didSet {
+            UserDefaults.standard.set(volumeOutputMaximum, forKey: "volumeOutputMaximum")
+            handleVolumePreferenceChange()
+        }
+    }
+
+    @Published var volumeMuteLevel: Double {
+        didSet {
+            UserDefaults.standard.set(volumeMuteLevel, forKey: "volumeMuteLevel")
+            handleVolumePreferenceChange()
+        }
     }
 
     // MARK: - Schedule Toggles
@@ -426,6 +439,7 @@ final class AppState: ObservableObject {
         self.volumeMessagePrefix = UserDefaults.standard.string(forKey: "volumeMessagePrefix") ?? "/cue/selected/level/0/"
         self.volumeOutputMinimum = UserDefaults.standard.object(forKey: "volumeOutputMinimum") as? Double ?? -60
         self.volumeOutputMaximum = UserDefaults.standard.object(forKey: "volumeOutputMaximum") as? Double ?? 12
+        self.volumeMuteLevel = UserDefaults.standard.object(forKey: "volumeMuteLevel") as? Double ?? -60
 
         self.showActionsEnabled = UserDefaults.standard.object(forKey: "showActionsEnabled") as? Bool ?? true
         self.utilityActionsEnabled = UserDefaults.standard.object(forKey: "utilityActionsEnabled") as? Bool ?? true
@@ -795,6 +809,7 @@ final class AppState: ObservableObject {
             volumeMessagePrefix: volumeMessagePrefix,
             volumeOutputMinimum: volumeOutputMinimum,
             volumeOutputMaximum: volumeOutputMaximum,
+            volumeMuteLevel: volumeMuteLevel,
             showActionsEnabled: showActionsEnabled,
             utilityActionsEnabled: utilityActionsEnabled,
             scheduleEnabledOnMessage: scheduleEnabledOnMessage,
@@ -854,6 +869,7 @@ final class AppState: ObservableObject {
             volumeMessagePrefix: volumeMessagePrefix,
             volumeOutputMinimum: volumeOutputMinimum,
             volumeOutputMaximum: volumeOutputMaximum,
+            volumeMuteLevel: volumeMuteLevel,
             showActionsEnabled: showActionsEnabled,
             utilityActionsEnabled: utilityActionsEnabled,
             scheduleEnabledOnMessage: scheduleEnabledOnMessage,
@@ -1150,6 +1166,7 @@ final class AppState: ObservableObject {
         volumeMessagePrefix = configuration.volumeMessagePrefix
         volumeOutputMinimum = configuration.volumeOutputMinimum
         volumeOutputMaximum = configuration.volumeOutputMaximum
+        volumeMuteLevel = configuration.volumeMuteLevel
 
         showActionsEnabled = configuration.showActionsEnabled
         utilityActionsEnabled = configuration.utilityActionsEnabled
@@ -1646,37 +1663,52 @@ final class AppState: ObservableObject {
 
     // MARK: - Volume
 
+    var volumeSliderLowerBound: Double {
+        min(volumeOutputMinimum, volumeOutputMaximum)
+    }
+
+    var volumeSliderUpperBound: Double {
+        let lower = volumeSliderLowerBound
+        let upper = max(volumeOutputMinimum, volumeOutputMaximum)
+
+        if upper == lower {
+            return lower + 1
+        }
+
+        return upper
+    }
+
+    var currentVolumeOutputValue: Double {
+        isMuted ? volumeMuteLevel : scaledVolumeOutputValue(for: volumeLevel)
+    }
+
     func setVolume(_ level: Double) {
         let clampedLevel = min(max(level, 0), 1)
 
         volumeLevel = clampedLevel
-
-        if clampedLevel > 0 {
-            lastUnmutedVolumeLevel = clampedLevel
-            isMuted = false
-        }
+        lastUnmutedVolumeLevel = clampedLevel
+        isMuted = false
 
         sendVolumeLevel()
+    }
+
+    func setVolumeOutputLevel(_ outputLevel: Double) {
+        setVolume(normalizedVolumeLevel(forOutputValue: outputLevel))
     }
 
     func toggleMute() {
         if isMuted {
             isMuted = false
-            volumeLevel = lastUnmutedVolumeLevel
+            volumeLevel = min(max(lastUnmutedVolumeLevel, 0), 1)
         } else {
-            if volumeLevel > 0 {
-                lastUnmutedVolumeLevel = volumeLevel
-            }
-
+            lastUnmutedVolumeLevel = min(max(volumeLevel, 0), 1)
             isMuted = true
-            volumeLevel = 0
         }
 
         sendVolumeLevel()
     }
 
     func applyVolumePreset(_ level: Double) {
-        isMuted = false
         setVolume(level)
     }
 
@@ -1689,8 +1721,8 @@ final class AppState: ObservableObject {
             return
         }
 
-        let scaledValue = scaledVolumeOutputValue(for: volumeLevel)
-        let formattedValue = formattedVolumeOutputValue(scaledValue)
+        let outputValue = currentVolumeOutputValue
+        let formattedValue = formattedVolumeOutputValue(outputValue)
         let message = "\(volumeMessagePrefix)\(formattedValue)"
 
         udpService.send(
@@ -1699,18 +1731,35 @@ final class AppState: ObservableObject {
             port: UInt16(volumeDestinationPort)
         )
 
-        let percent = Int(volumeLevel * 100)
-        lastMessage = "Volume set to \(percent)% → \(formattedValue)"
+        if isMuted {
+            lastMessage = "Volume muted → \(formattedValue)"
+        } else {
+            let percent = Int(volumeLevel * 100)
+            lastMessage = "Volume set to \(formattedValue) (slider \(percent)%)"
+        }
     }
 
-    private func scaledVolumeOutputValue(for level: Double) -> Double {
+    func scaledVolumeOutputValue(for level: Double) -> Double {
         let clampedLevel = min(max(level, 0), 1)
-        let outputRange = volumeOutputMaximum - volumeOutputMinimum
+        let outputRange = volumeSliderUpperBound - volumeSliderLowerBound
 
-        return volumeOutputMinimum + (clampedLevel * outputRange)
+        return volumeSliderLowerBound + (clampedLevel * outputRange)
     }
 
-    private func formattedVolumeOutputValue(_ value: Double) -> String {
+    func normalizedVolumeLevel(forOutputValue outputValue: Double) -> Double {
+        let lower = volumeSliderLowerBound
+        let upper = volumeSliderUpperBound
+        let clampedOutputValue = min(max(outputValue, lower), upper)
+        let outputRange = upper - lower
+
+        guard outputRange > 0 else {
+            return 0
+        }
+
+        return (clampedOutputValue - lower) / outputRange
+    }
+
+    func formattedVolumeOutputValue(_ value: Double) -> String {
         let roundedValue = (value * 1000).rounded() / 1000
 
         if roundedValue.rounded() == roundedValue {
@@ -1718,6 +1767,10 @@ final class AppState: ObservableObject {
         }
 
         return String(roundedValue)
+    }
+
+    private func handleVolumePreferenceChange() {
+        sendVolumeLevel()
     }
 
     // MARK: - Schedule Engine
@@ -2032,6 +2085,7 @@ private struct LaunchControlConfiguration: Codable {
     let volumeMessagePrefix: String
     let volumeOutputMinimum: Double
     let volumeOutputMaximum: Double
+    let volumeMuteLevel: Double
 
     let showActionsEnabled: Bool
     let utilityActionsEnabled: Bool
@@ -2068,6 +2122,7 @@ private struct LaunchControlConfiguration: Codable {
         case volumeMessagePrefix
         case volumeOutputMinimum
         case volumeOutputMaximum
+        case volumeMuteLevel
 
         case showActionsEnabled
         case utilityActionsEnabled
@@ -2103,6 +2158,7 @@ private struct LaunchControlConfiguration: Codable {
         volumeMessagePrefix: String,
         volumeOutputMinimum: Double,
         volumeOutputMaximum: Double,
+        volumeMuteLevel: Double,
         showActionsEnabled: Bool,
         utilityActionsEnabled: Bool,
         scheduleEnabledOnMessage: String,
@@ -2134,6 +2190,7 @@ private struct LaunchControlConfiguration: Codable {
         self.volumeMessagePrefix = volumeMessagePrefix
         self.volumeOutputMinimum = volumeOutputMinimum
         self.volumeOutputMaximum = volumeOutputMaximum
+        self.volumeMuteLevel = volumeMuteLevel
 
         self.showActionsEnabled = showActionsEnabled
         self.utilityActionsEnabled = utilityActionsEnabled
@@ -2173,6 +2230,7 @@ private struct LaunchControlConfiguration: Codable {
         volumeMessagePrefix = try container.decodeIfPresent(String.self, forKey: .volumeMessagePrefix) ?? "/cue/selected/level/0/"
         volumeOutputMinimum = try container.decodeIfPresent(Double.self, forKey: .volumeOutputMinimum) ?? -60
         volumeOutputMaximum = try container.decodeIfPresent(Double.self, forKey: .volumeOutputMaximum) ?? 12
+        volumeMuteLevel = try container.decodeIfPresent(Double.self, forKey: .volumeMuteLevel) ?? -60
 
         showActionsEnabled = try container.decodeIfPresent(Bool.self, forKey: .showActionsEnabled) ?? true
         utilityActionsEnabled = try container.decodeIfPresent(Bool.self, forKey: .utilityActionsEnabled) ?? true
@@ -2216,6 +2274,7 @@ private struct LaunchControlConfiguration: Codable {
         try container.encode(volumeMessagePrefix, forKey: .volumeMessagePrefix)
         try container.encode(volumeOutputMinimum, forKey: .volumeOutputMinimum)
         try container.encode(volumeOutputMaximum, forKey: .volumeOutputMaximum)
+        try container.encode(volumeMuteLevel, forKey: .volumeMuteLevel)
 
         try container.encode(showActionsEnabled, forKey: .showActionsEnabled)
         try container.encode(utilityActionsEnabled, forKey: .utilityActionsEnabled)

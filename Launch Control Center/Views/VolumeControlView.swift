@@ -19,6 +19,10 @@ struct VolumeControlView: View {
 
     // MARK: - Derived State
 
+    private var outputValueText: String {
+        appState.formattedVolumeOutputValue(appState.currentVolumeOutputValue)
+    }
+
     private var volumePercent: Int {
         Int(appState.volumeLevel * 100)
     }
@@ -31,6 +35,10 @@ struct VolumeControlView: View {
         appState.isMuted ? .secondary : .blue
     }
 
+    private var sliderRange: ClosedRange<Double> {
+        appState.volumeSliderLowerBound...appState.volumeSliderUpperBound
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -40,17 +48,7 @@ struct VolumeControlView: View {
             VStack(alignment: .leading, spacing: 12) {
                 topRow
 
-                Slider(
-                    value: Binding(
-                        get: {
-                            appState.volumeLevel
-                        },
-                        set: { newValue in
-                            appState.setVolume(newValue)
-                        }
-                    ),
-                    in: 0...1
-                )
+                volumeSliderArea
 
                 presetButtons
             }
@@ -93,10 +91,74 @@ struct VolumeControlView: View {
 
             Spacer()
 
-            Text("\(volumePercent)%")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(outputValueText)
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+
+                Text(appState.isMuted ? "Mute level" : "Slider \(volumePercent)%")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+    }
+
+    private var volumeSliderArea: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if appState.isMuted {
+                mutedSliderPlaceholder
+            } else {
+                Slider(
+                    value: Binding(
+                        get: {
+                            appState.scaledVolumeOutputValue(for: appState.volumeLevel)
+                        },
+                        set: { newValue in
+                            appState.setVolumeOutputLevel(newValue)
+                        }
+                    ),
+                    in: sliderRange
+                )
+                .frame(height: 22)
+            }
+
+            HStack {
+                Text(appState.formattedVolumeOutputValue(appState.volumeSliderLowerBound))
+                Spacer()
+                Text(appState.formattedVolumeOutputValue(appState.volumeSliderUpperBound))
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        }
+        .frame(height: 43)
+    }
+
+    private var mutedSliderPlaceholder: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor).opacity(0.22))
+                .frame(height: 6)
+
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.secondary.opacity(0.35))
+                .frame(height: 6)
+
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.slash.fill")
+                    .font(.caption2)
+
+                Text("Muted at \(appState.formattedVolumeOutputValue(appState.volumeMuteLevel))")
+                    .font(.caption)
+                    .monospacedDigit()
+
+                Spacer()
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+        }
+        .frame(height: 22)
+        .accessibilityLabel("Muted at \(appState.formattedVolumeOutputValue(appState.volumeMuteLevel))")
     }
 
     private var presetButtons: some View {
@@ -209,3 +271,4 @@ struct VolumeControlView: View {
             )
     }
 }
+
