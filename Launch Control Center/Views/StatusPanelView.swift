@@ -360,6 +360,10 @@ struct EventSummaryView: View {
 
     @EnvironmentObject var appState: AppState
 
+    // MARK: - Cache
+
+    @State private var nextEventCache = DashboardNextEventCache()
+
     // MARK: - Layout Constants
 
     private let eventCardHeight: CGFloat = 86
@@ -415,12 +419,20 @@ struct EventSummaryView: View {
     }
 
     private func nextEventContent(now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let next = nextEventCache.nextEvent(
+            from: now,
+            actionDefinitions: appState.actionDefinitions,
+            scheduleEntries: appState.scheduleEntries,
+            showActionsEnabled: appState.showActionsEnabled,
+            utilityActionsEnabled: appState.utilityActionsEnabled
+        )
+
+        return VStack(alignment: .leading, spacing: 4) {
             Text("Next Event")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if let next = nextEvent(from: now) {
+            if let next {
                 Text(next.action.name)
                     .font(.headline)
                     .lineLimit(1)
@@ -473,152 +485,6 @@ struct EventSummaryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    // MARK: - Event Selection
-
-    private func nextEvent(from now: Date) -> (event: ScheduleEntry, action: ActionDefinition, occurrenceDate: Date)? {
-        appState.scheduleEntries
-            .filter { $0.enabled }
-            .compactMap { event -> (ScheduleEntry, ActionDefinition, Date)? in
-                guard let action = appState.actionDefinitions.first(where: {
-                    $0.id == event.actionDefinitionID
-                }) else {
-                    return nil
-                }
-
-                guard eventIsAllowed(action) else {
-                    return nil
-                }
-
-                guard let occurrenceDate = nextOccurrenceDate(
-                    for: event,
-                    from: now
-                ) else {
-                    return nil
-                }
-
-                return (event, action, occurrenceDate)
-            }
-            .sorted { $0.2 < $1.2 }
-            .first
-    }
-
-    private func eventIsAllowed(_ action: ActionDefinition) -> Bool {
-        switch action.type {
-        case .show:
-            return appState.showActionsEnabled
-
-        case .utility:
-            return appState.utilityActionsEnabled
-        }
-    }
-
-    // MARK: - Occurrence Calculation
-
-    private func nextOccurrenceDate(
-        for event: ScheduleEntry,
-        from now: Date
-    ) -> Date? {
-        if event.repeatsDaily == false {
-            return event.startDate >= now ? event.startDate : nil
-        }
-
-        let calendar = Calendar.current
-        let selectedWeekdays = selectedWeekdays(for: event)
-        let eventStartDay = calendar.startOfDay(for: event.startDate)
-
-        for dayOffset in 0...370 {
-            guard let candidateDay = calendar.date(
-                byAdding: .day,
-                value: dayOffset,
-                to: calendar.startOfDay(for: now)
-            ) else {
-                continue
-            }
-
-            guard candidateDay >= eventStartDay else {
-                continue
-            }
-
-            if let repeatUntil = event.repeatUntil {
-                let repeatUntilDay = calendar.startOfDay(for: repeatUntil)
-
-                guard candidateDay <= repeatUntilDay else {
-                    return nil
-                }
-            }
-
-            guard eventIsNotExcluded(event, on: candidateDay) else {
-                continue
-            }
-
-            let candidateWeekday = calendar.component(
-                .weekday,
-                from: candidateDay
-            )
-
-            guard selectedWeekdays.contains(candidateWeekday) else {
-                continue
-            }
-
-            let occurrenceDate = occurrenceDate(
-                on: candidateDay,
-                usingTimeFrom: event.startDate
-            )
-
-            if occurrenceDate >= now {
-                return occurrenceDate
-            }
-        }
-
-        return nil
-    }
-
-    private func occurrenceDate(
-        on day: Date,
-        usingTimeFrom timeSource: Date
-    ) -> Date {
-        let calendar = Calendar.current
-
-        let dayComponents = calendar.dateComponents(
-            [.year, .month, .day],
-            from: day
-        )
-
-        let timeComponents = calendar.dateComponents(
-            [.hour, .minute, .second],
-            from: timeSource
-        )
-
-        var components = DateComponents()
-        components.year = dayComponents.year
-        components.month = dayComponents.month
-        components.day = dayComponents.day
-        components.hour = timeComponents.hour
-        components.minute = timeComponents.minute
-        components.second = timeComponents.second
-
-        return calendar.date(from: components) ?? timeSource
-    }
-
-    private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
-        if event.repeatWeekdays.isEmpty {
-            return Set(1...7)
-        }
-
-        return event.repeatWeekdays
-    }
-
-    private func eventIsNotExcluded(
-        _ event: ScheduleEntry,
-        on date: Date
-    ) -> Bool {
-        let calendar = Calendar.current
-
-        return event.excludedOccurrenceDates.contains { excludedDate in
-            calendar.isDate(excludedDate, inSameDayAs: date)
-        } == false
-    }
-
     // MARK: - Event Text Formatting
 
     private func repeatSummary(for event: ScheduleEntry) -> String {
@@ -642,6 +508,14 @@ struct EventSummaryView: View {
 
         let names = weekdayNames(for: weekdays)
         return names.joined(separator: ", ")
+    }
+
+    private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
+        if event.repeatWeekdays.isEmpty {
+            return Set(1...7)
+        }
+
+        return event.repeatWeekdays
     }
 
     private func weekdayNames(for weekdays: Set<Int>) -> [String] {
@@ -717,6 +591,333 @@ struct EventSummaryView: View {
         }
 
         return "\(minutes)m \(seconds)s"
+    }
+}
+
+// MARK: - Dashboard Next Event Cache
+
+@MainActor
+private final class DashboardNextEventCache {
+    private var cachedFingerprint: String?
+    private var cachedResult: DashboardNextEvent?
+    private var cachedEmptyResultRecheckDate: Date?
+
+    func nextEvent(
+        from now: Date,
+        actionDefinitions: [ActionDefinition],
+        scheduleEntries: [ScheduleEntry],
+        showActionsEnabled: Bool,
+        utilityActionsEnabled: Bool
+    ) -> DashboardNextEvent? {
+        let fingerprint = makeFingerprint(
+            actionDefinitions: actionDefinitions,
+            scheduleEntries: scheduleEntries,
+            showActionsEnabled: showActionsEnabled,
+            utilityActionsEnabled: utilityActionsEnabled
+        )
+
+        if fingerprint == cachedFingerprint {
+            if let cachedResult, cachedResult.occurrenceDate >= now {
+                return cachedResult
+            }
+
+            if cachedResult == nil,
+               let cachedEmptyResultRecheckDate,
+               now < cachedEmptyResultRecheckDate {
+                return nil
+            }
+        }
+
+        let resolvedResult = resolveNextEvent(
+            from: now,
+            actionDefinitions: actionDefinitions,
+            scheduleEntries: scheduleEntries,
+            showActionsEnabled: showActionsEnabled,
+            utilityActionsEnabled: utilityActionsEnabled
+        )
+
+        cachedFingerprint = fingerprint
+        cachedResult = resolvedResult
+        cachedEmptyResultRecheckDate = emptyResultRecheckDate(
+            resolvedResult: resolvedResult,
+            now: now
+        )
+
+        return resolvedResult
+    }
+
+
+    private func emptyResultRecheckDate(
+        resolvedResult: DashboardNextEvent?,
+        now: Date
+    ) -> Date? {
+        guard resolvedResult == nil else {
+            return nil
+        }
+
+        return Calendar.current.date(
+            byAdding: .hour,
+            value: 1,
+            to: now
+        )
+    }
+
+    private func resolveNextEvent(
+        from now: Date,
+        actionDefinitions: [ActionDefinition],
+        scheduleEntries: [ScheduleEntry],
+        showActionsEnabled: Bool,
+        utilityActionsEnabled: Bool
+    ) -> DashboardNextEvent? {
+        let actionsByID = Dictionary(
+            uniqueKeysWithValues: actionDefinitions.map { ($0.id, $0) }
+        )
+
+        var bestResult: DashboardNextEvent?
+
+        for event in scheduleEntries where event.enabled {
+            guard let action = actionsByID[event.actionDefinitionID] else {
+                continue
+            }
+
+            guard actionIsAllowed(
+                action,
+                showActionsEnabled: showActionsEnabled,
+                utilityActionsEnabled: utilityActionsEnabled
+            ) else {
+                continue
+            }
+
+            guard let occurrenceDate = DashboardScheduleOccurrenceResolver.nextOccurrenceDate(
+                for: event,
+                from: now
+            ) else {
+                continue
+            }
+
+            if let existingBest = bestResult,
+               occurrenceDate >= existingBest.occurrenceDate {
+                continue
+            }
+
+            bestResult = DashboardNextEvent(
+                event: event,
+                action: action,
+                occurrenceDate: occurrenceDate
+            )
+        }
+
+        return bestResult
+    }
+
+    private func actionIsAllowed(
+        _ action: ActionDefinition,
+        showActionsEnabled: Bool,
+        utilityActionsEnabled: Bool
+    ) -> Bool {
+        switch action.type {
+        case .show:
+            return showActionsEnabled
+
+        case .utility:
+            return utilityActionsEnabled
+        }
+    }
+
+    private func makeFingerprint(
+        actionDefinitions: [ActionDefinition],
+        scheduleEntries: [ScheduleEntry],
+        showActionsEnabled: Bool,
+        utilityActionsEnabled: Bool
+    ) -> String {
+        var parts: [String] = [
+            "show:\(showActionsEnabled)",
+            "utility:\(utilityActionsEnabled)"
+        ]
+
+        parts.append(
+            contentsOf: actionDefinitions
+                .sorted { $0.id.uuidString < $1.id.uuidString }
+                .map { action in
+                    "action:\(action.id.uuidString):\(action.name):\(action.type.rawValue)"
+                }
+        )
+
+        parts.append(
+            contentsOf: scheduleEntries
+                .sorted { $0.id.uuidString < $1.id.uuidString }
+                .map { event in
+                    let weekdays = event.repeatWeekdays
+                        .sorted()
+                        .map(String.init)
+                        .joined(separator: ",")
+
+                    let exclusions = event.excludedOccurrenceDates
+                        .map { String($0.timeIntervalSinceReferenceDate) }
+                        .sorted()
+                        .joined(separator: ",")
+
+                    let repeatUntil = event.repeatUntil.map {
+                        String($0.timeIntervalSinceReferenceDate)
+                    } ?? "nil"
+
+                    return [
+                        "event",
+                        event.id.uuidString,
+                        event.actionDefinitionID.uuidString,
+                        String(event.startDate.timeIntervalSinceReferenceDate),
+                        String(event.enabled),
+                        String(event.repeatsDaily),
+                        weekdays,
+                        repeatUntil,
+                        exclusions
+                    ].joined(separator: ":")
+                }
+        )
+
+        return parts.joined(separator: "|")
+    }
+}
+
+private struct DashboardNextEvent {
+    let event: ScheduleEntry
+    let action: ActionDefinition
+    let occurrenceDate: Date
+}
+
+// MARK: - Dashboard Schedule Occurrence Resolver
+
+private enum DashboardScheduleOccurrenceResolver {
+    private static let maximumLookaheadDays = 370
+
+    static func nextOccurrenceDate(
+        for event: ScheduleEntry,
+        from now: Date
+    ) -> Date? {
+        if event.repeatsDaily == false {
+            return event.startDate >= now ? event.startDate : nil
+        }
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let eventStartDay = calendar.startOfDay(for: event.startDate)
+        let searchStartDay = max(today, eventStartDay)
+
+        if let repeatUntil = event.repeatUntil {
+            let repeatUntilDay = calendar.startOfDay(for: repeatUntil)
+
+            guard searchStartDay <= repeatUntilDay else {
+                return nil
+            }
+        }
+
+        let selectedWeekdays = selectedWeekdays(for: event)
+        let orderedCandidateOffsets = candidateWeekdayOffsets(
+            from: searchStartDay,
+            selectedWeekdays: selectedWeekdays,
+            calendar: calendar
+        )
+
+        for weekOffset in stride(from: 0, through: maximumLookaheadDays, by: 7) {
+            for candidateOffset in orderedCandidateOffsets {
+                let totalOffset = weekOffset + candidateOffset
+
+                guard totalOffset <= maximumLookaheadDays else {
+                    continue
+                }
+
+                guard let candidateDay = calendar.date(
+                    byAdding: .day,
+                    value: totalOffset,
+                    to: searchStartDay
+                ) else {
+                    continue
+                }
+
+                if let repeatUntil = event.repeatUntil {
+                    let repeatUntilDay = calendar.startOfDay(for: repeatUntil)
+
+                    guard candidateDay <= repeatUntilDay else {
+                        return nil
+                    }
+                }
+
+                guard eventIsNotExcluded(event, on: candidateDay, calendar: calendar) else {
+                    continue
+                }
+
+                let occurrenceDate = occurrenceDate(
+                    on: candidateDay,
+                    usingTimeFrom: event.startDate,
+                    calendar: calendar
+                )
+
+                if occurrenceDate >= now {
+                    return occurrenceDate
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private static func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
+        if event.repeatWeekdays.isEmpty {
+            return Set(1...7)
+        }
+
+        return event.repeatWeekdays
+    }
+
+    private static func candidateWeekdayOffsets(
+        from startDay: Date,
+        selectedWeekdays: Set<Int>,
+        calendar: Calendar
+    ) -> [Int] {
+        let startWeekday = calendar.component(.weekday, from: startDay)
+
+        return selectedWeekdays
+            .map { weekday in
+                let rawOffset = weekday - startWeekday
+                return rawOffset >= 0 ? rawOffset : rawOffset + 7
+            }
+            .sorted()
+    }
+
+    private static func occurrenceDate(
+        on day: Date,
+        usingTimeFrom timeSource: Date,
+        calendar: Calendar
+    ) -> Date {
+        let dayComponents = calendar.dateComponents(
+            [.year, .month, .day],
+            from: day
+        )
+
+        let timeComponents = calendar.dateComponents(
+            [.hour, .minute, .second],
+            from: timeSource
+        )
+
+        var components = DateComponents()
+        components.year = dayComponents.year
+        components.month = dayComponents.month
+        components.day = dayComponents.day
+        components.hour = timeComponents.hour
+        components.minute = timeComponents.minute
+        components.second = timeComponents.second
+
+        return calendar.date(from: components) ?? timeSource
+    }
+
+    private static func eventIsNotExcluded(
+        _ event: ScheduleEntry,
+        on date: Date,
+        calendar: Calendar
+    ) -> Bool {
+        return event.excludedOccurrenceDates.contains { excludedDate in
+            calendar.isDate(excludedDate, inSameDayAs: date)
+        } == false
     }
 }
 
