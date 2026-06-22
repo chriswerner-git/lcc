@@ -742,7 +742,7 @@ struct ScheduleCalendarView: View {
                 deletingOccurrence = nil
             }
 
-            Button("Delete Entire Series", role: .destructive) {
+            Button(seriesDeleteButtonTitle(for: occurrence), role: .destructive) {
                 deleteEntireEventSeries(occurrence)
                 deletingOccurrence = nil
             }
@@ -760,10 +760,133 @@ struct ScheduleCalendarView: View {
 
     private func deleteDialogMessage(for occurrence: ScheduleOccurrence) -> some View {
         if occurrence.event.repeatsDaily {
-            Text("This is a recurring Event. Delete only this occurrence, or delete the entire series?")
+            Text(seriesDeleteWarningText(for: occurrence))
         } else {
-            Text("This will permanently delete this scheduled Event.")
+            Text("This will permanently delete this scheduled Event. This cannot be undone.")
         }
+    }
+
+    private func seriesDeleteButtonTitle(for occurrence: ScheduleOccurrence) -> String {
+        guard let countText = seriesInstanceCountText(for: occurrence.event) else {
+            return "Delete Entire Series"
+        }
+
+        return "Delete Entire Series (\(countText))"
+    }
+
+    private func seriesDeleteWarningText(for occurrence: ScheduleOccurrence) -> String {
+        let event = occurrence.event
+        let seriesNameText = cleanedSeriesName(for: event) ?? "Unnamed Series"
+        let frequencyText = ScheduleEntryFormatter.repeatSummary(
+            for: event,
+            oneTimeText: "One time",
+            includeRepeatUntil: false
+        )
+        let endText = seriesEndSummaryText(for: event)
+        let instanceText = seriesInstanceWarningText(for: event)
+
+        return """
+        You are about to delete the entire recurring Event series. This cannot be undone.
+
+        Series: \(seriesNameText)
+        Action: \(occurrence.action.name)
+        Frequency: \(frequencyText)
+        End: \(endText)
+        Instances: \(instanceText)
+
+        Choose “Delete This Occurrence” to remove only \(Self.fullDateTimeFormatter.string(from: occurrence.occurrenceDate)).
+        """
+    }
+
+    private func seriesInstanceWarningText(for event: ScheduleEntry) -> String {
+        if let countText = seriesInstanceCountText(for: event) {
+            return "This will delete \(countText)."
+        }
+
+        return "This series has no end date, so the total number of future generated instances cannot be counted. Deleting the series removes all of its generated instances."
+    }
+
+    private func seriesInstanceCountText(for event: ScheduleEntry) -> String? {
+        guard event.repeatsDaily else {
+            return "1 Event"
+        }
+
+        guard let endDay = seriesEndDay(for: event) else {
+            return nil
+        }
+
+        let calendar = Calendar.current
+        var currentDay = calendar.startOfDay(for: event.startDate)
+        let finalDay = calendar.startOfDay(for: endDay)
+        var count = 0
+        var guardCount = 0
+
+        while currentDay <= finalDay, guardCount < 3_700 {
+            count += ScheduleEntryFormatter.occurrenceDates(
+                for: event,
+                on: currentDay,
+                calendar: calendar
+            ).count
+
+            guard let nextDay = calendar.date(
+                byAdding: .day,
+                value: 1,
+                to: currentDay
+            ) else {
+                break
+            }
+
+            currentDay = nextDay
+            guardCount += 1
+        }
+
+        if guardCount >= 3_700, currentDay <= finalDay {
+            return "more than \(count) Events"
+        }
+
+        return "\(count) \(count == 1 ? "Event" : "Events")"
+    }
+
+    private func seriesEndSummaryText(for event: ScheduleEntry) -> String {
+        guard let endDay = seriesEndDay(for: event) else {
+            if event.repeatMode == .intervalDuringDay, let intervalEndTime = event.intervalEndTime {
+                return "No end date. Daily interval ends at \(Self.timeOnlyFormatter.string(from: intervalEndTime)) when it runs."
+            }
+
+            return "No end date."
+        }
+
+        let calendar = Calendar.current
+        let timeSource: Date
+
+        switch event.repeatMode {
+        case .oncePerSelectedDay:
+            timeSource = event.startDate
+
+        case .intervalDuringDay:
+            timeSource = event.intervalEndTime ?? event.startDate
+        }
+
+        let endDateTime = ScheduleEntryFormatter.date(
+            on: endDay,
+            usingTimeFrom: timeSource,
+            calendar: calendar
+        ) ?? endDay
+
+        if event.repeatMode == .intervalDuringDay {
+            return "\(Self.fullDateTimeFormatter.string(from: endDateTime)). End time is inclusive when it lands exactly on the interval."
+        }
+
+        return Self.fullDateTimeFormatter.string(from: endDateTime)
+    }
+
+    private func seriesEndDay(for event: ScheduleEntry) -> Date? {
+        event.seriesEndDate ?? event.repeatUntil
+    }
+
+    private func cleanedSeriesName(for event: ScheduleEntry) -> String? {
+        let trimmed = event.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func deleteSingleOccurrence(_ occurrence: ScheduleOccurrence) {
@@ -1157,6 +1280,20 @@ struct ScheduleCalendarView: View {
     private static let fullDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMM d, yyyy"
+        return formatter
+    }()
+
+    private static let fullDateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let timeOnlyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
         return formatter
     }()
 
