@@ -13,9 +13,10 @@
 //  - Launch at Startup is an app/user preference and is not exported with project configurations.
 //  - Prevent Computer Sleep is an app/user preference and is not exported with project configurations.
 //  - Operational Log Retention is an app/user preference and is not exported with project configurations.
+//  - Syslog Device Name is an app/user preference and is not exported with project configurations.
 //  - Schedule enable toggles affect scheduled Events only.
 //  - Manual Action buttons still run regardless of schedule toggle state.
-//  - Show Actions execute UDP command steps.
+//  - Show Actions execute message steps.
 //  - Utility Actions execute dashboard-level Utility steps.
 //
 
@@ -88,6 +89,15 @@ final class AppState: ObservableObject {
             if safeValue != operationalLogRetentionDays {
                 operationalLogRetentionDays = safeValue
             }
+        }
+    }
+
+    @Published var syslogDeviceName: String {
+        didSet {
+            UserDefaults.standard.set(
+                syslogDeviceName,
+                forKey: "syslogDeviceName"
+            )
         }
     }
 
@@ -222,6 +232,7 @@ final class AppState: ObservableObject {
     init() {
         self.preventComputerSleepEnabled = UserDefaults.standard.object(forKey: "preventComputerSleepEnabled") as? Bool ?? false
         self.operationalLogRetentionDays = UserDefaults.standard.object(forKey: "operationalLogRetentionDays") as? Int ?? 90
+        self.syslogDeviceName = UserDefaults.standard.string(forKey: "syslogDeviceName") ?? AppState.defaultSyslogDeviceName()
 
         self.projectName = UserDefaults.standard.string(forKey: "projectName") ?? "Untitled Project"
         self.projectNotes = UserDefaults.standard.string(forKey: "projectNotes") ?? ""
@@ -278,6 +289,18 @@ final class AppState: ObservableObject {
         scheduleEngine.stop()
         systemLifecycleService.stop()
         sleepPreventionService.disable()
+    }
+
+    // MARK: - App Defaults
+
+    private static func defaultSyslogDeviceName() -> String {
+        let candidate = Host.current().localizedName
+            ?? Host.current().name
+            ?? "Launch-Control-Center"
+
+        let trimmedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return trimmedCandidate.isEmpty ? "Launch-Control-Center" : trimmedCandidate
     }
 
     // MARK: - Launch at Startup
@@ -807,7 +830,7 @@ final class AppState: ObservableObject {
         actionStartDate: Date
     ) async -> Bool {
         guard action.commands.isEmpty == false else {
-            lastMessage = "Show Action has no UDP Steps: \(action.name)"
+            lastMessage = "Show Action has no Message Steps: \(action.name)"
             logger.warning(lastMessage)
             return false
         }
@@ -830,12 +853,12 @@ final class AppState: ObservableObject {
                 return false
             }
 
-            guard sendUDPCommand(command) else {
+            guard sendMessageCommand(command) else {
                 controlStatus = .error
                 return false
             }
 
-            lastMessage = "Sent Step: \(command.name)"
+            lastMessage = "Sent \(command.messageType.rawValue) Step: \(command.name)"
         }
 
         return true
@@ -1040,16 +1063,16 @@ final class AppState: ObservableObject {
     }
 
     func runSingleCommand(_ command: UDPCommand) {
-        guard sendUDPCommand(command) else {
+        guard sendMessageCommand(command) else {
             controlStatus = .error
             return
         }
 
-        lastMessage = "Sent Step: \(command.name)"
+        lastMessage = "Sent \(command.messageType.rawValue) Step: \(command.name)"
     }
 
     @MainActor
-    private func sendUDPCommand(_ command: UDPCommand) -> Bool {
+    private func sendMessageCommand(_ command: UDPCommand) -> Bool {
         guard command.port >= 0,
               command.port <= Int(UInt16.max) else {
             lastMessage = "Invalid UDP port for Step: \(command.name)"
@@ -1057,11 +1080,27 @@ final class AppState: ObservableObject {
             return false
         }
 
+        let payload: String
+
+        switch command.messageType {
+        case .standardUDP:
+            payload = command.message
+
+        case .syslog:
+            payload = SyslogMessageFormatter.formattedMessage(
+                severity: command.syslogSeverity,
+                deviceName: syslogDeviceName,
+                message: command.message
+            )
+        }
+
         udpService.send(
-            message: command.message,
+            message: payload,
             host: command.host,
             port: UInt16(command.port)
         )
+
+        logger.info("Sent \(command.messageType.rawValue) Step: \(command.name) to \(command.host):\(command.port)")
 
         return true
     }

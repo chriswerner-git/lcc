@@ -110,11 +110,12 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var menuBarExtra: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(
+            "Launch Control Center",
+            image: menuBarIconAssetName
+        ) {
             MenuBarView()
                 .environmentObject(appState)
-        } label: {
-            menuBarIconLabel
         }
         .commands {
             appMenuCommands
@@ -123,32 +124,14 @@ struct Launch_Control_CenterApp: App {
         }
     }
 
-    // MARK: - Menu Bar Icon
-
-    private var menuBarIconLabel: some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: "rocket.fill")
-                .imageScale(.large)
-
-            if scheduleIsActive {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 8, weight: .bold))
-                    .offset(x: 6, y: -5)
-            }
-        }
-        .accessibilityLabel(menuBarIconAccessibilityLabel)
-    }
+    // MARK: - Menu Bar Icon State
 
     private var scheduleIsActive: Bool {
         appState.showActionsEnabled || appState.utilityActionsEnabled
     }
 
-    private var menuBarIconAccessibilityLabel: String {
-        if scheduleIsActive {
-            return "Launch Control Center, schedule active"
-        }
-
-        return "Launch Control Center, schedule inactive"
+    private var menuBarIconAssetName: String {
+        scheduleIsActive ? "MenuBarIconActive" : "MenuBarIconInactive"
     }
 
     // MARK: - Standard macOS App Menu Commands

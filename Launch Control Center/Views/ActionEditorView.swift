@@ -77,7 +77,7 @@ struct ActionEditorView: View {
                     .font(.largeTitle)
                     .bold()
 
-                Text(action.type == .show ? "Show Action · UDP steps" : "Utility Action · Dashboard automation")
+                Text(action.type == .show ? "Show Action · Message steps" : "Utility Action · Dashboard automation")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -204,30 +204,30 @@ struct ActionEditorView: View {
         }
     }
 
-    // MARK: - Show / UDP Steps
+    // MARK: - Show / Message Steps
 
     private func showStepsSection(index: Int) -> some View {
         stepsShell(
-            title: "UDP Steps",
+            title: "Message Steps",
             subtitle: "\(appState.actionDefinitions[index].commands.count) configured",
-            addButtonTitle: "Add UDP Step",
+            addButtonTitle: "Add Message Step",
             addSystemImage: "plus",
             addAction: {
-                addUDPStep(to: index)
+                addMessageStep(to: index)
             }
         ) {
             if appState.actionDefinitions[index].commands.isEmpty {
                 emptyStepsView(
                     systemImage: "network",
-                    title: "No UDP Steps",
-                    message: "Add a UDP Step to send commands when this Show Action runs."
+                    title: "No Message Steps",
+                    message: "Add a Message Step to send Standard UDP or Syslog messages when this Show Action runs."
                 )
             } else {
                 ForEach(
                     Array($appState.actionDefinitions[index].commands.enumerated()),
                     id: \.element.id
                 ) { stepIndex, $command in
-                    udpStepCard(
+                    messageStepCard(
                         actionIndex: index,
                         stepIndex: stepIndex,
                         command: $command
@@ -237,16 +237,16 @@ struct ActionEditorView: View {
         }
     }
 
-    private func udpStepCard(
+    private func messageStepCard(
         actionIndex: Int,
         stepIndex: Int,
         command: Binding<UDPCommand>
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             stepCardHeader(
-                iconName: "paperplane.fill",
+                iconName: command.wrappedValue.messageType.systemImage,
                 iconColor: .blue,
-                title: "UDP Step \(stepIndex + 1)",
+                title: "Message Step \(stepIndex + 1)",
                 subtitle: command.wrappedValue.name
             ) {
                 HStack(spacing: 10) {
@@ -261,12 +261,76 @@ struct ActionEditorView: View {
                 }
             }
 
-            labeledTextField(
-                label: "Step Name",
-                placeholder: "Step Name",
-                text: command.name
-            )
+            HStack(alignment: .top, spacing: 12) {
+                labeledTextField(
+                    label: "Step Name",
+                    placeholder: "Step Name",
+                    text: command.name
+                )
 
+                messageTypePicker(command: command)
+            }
+
+            messageStepConfiguration(command: command)
+
+            stepMoveDeleteControls(
+                moveUpDisabled: stepIndex == 0,
+                moveDownDisabled: stepIndex == appState.actionDefinitions[actionIndex].commands.count - 1,
+                moveUp: {
+                    moveMessageStepUp(
+                        actionIndex: actionIndex,
+                        stepIndex: stepIndex
+                    )
+                },
+                moveDown: {
+                    moveMessageStepDown(
+                        actionIndex: actionIndex,
+                        stepIndex: stepIndex
+                    )
+                },
+                delete: {
+                    deleteMessageStep(
+                        commandID: command.wrappedValue.id,
+                        actionIndex: actionIndex
+                    )
+                }
+            )
+        }
+        .padding(14)
+        .background(stepCardBackground)
+        .overlay(stepCardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func messageTypePicker(command: Binding<UDPCommand>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Message Type")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("", selection: command.messageType) {
+                ForEach(MessageStepType.allCases) { messageType in
+                    Text(messageType.rawValue).tag(messageType)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 180)
+        }
+    }
+
+    @ViewBuilder
+    private func messageStepConfiguration(command: Binding<UDPCommand>) -> some View {
+        switch command.wrappedValue.messageType {
+        case .standardUDP:
+            standardUDPConfiguration(command: command)
+
+        case .syslog:
+            syslogConfiguration(command: command)
+        }
+    }
+
+    private func standardUDPConfiguration(command: Binding<UDPCommand>) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 labeledTextField(
                     label: "Destination IP Address",
@@ -286,34 +350,75 @@ struct ActionEditorView: View {
                 placeholder: "UDP Message",
                 text: command.message
             )
-
-            stepMoveDeleteControls(
-                moveUpDisabled: stepIndex == 0,
-                moveDownDisabled: stepIndex == appState.actionDefinitions[actionIndex].commands.count - 1,
-                moveUp: {
-                    moveUDPStepUp(
-                        actionIndex: actionIndex,
-                        stepIndex: stepIndex
-                    )
-                },
-                moveDown: {
-                    moveUDPStepDown(
-                        actionIndex: actionIndex,
-                        stepIndex: stepIndex
-                    )
-                },
-                delete: {
-                    deleteUDPStep(
-                        commandID: command.wrappedValue.id,
-                        actionIndex: actionIndex
-                    )
-                }
-            )
         }
-        .padding(14)
-        .background(stepCardBackground)
-        .overlay(stepCardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func syslogConfiguration(command: Binding<UDPCommand>) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                labeledTextField(
+                    label: "Destination IP Address",
+                    placeholder: "127.0.0.1",
+                    text: command.host
+                )
+
+                labeledIntegerField(
+                    label: "Port",
+                    value: command.port,
+                    width: 120
+                )
+
+                syslogSeverityPicker(severity: command.syslogSeverity)
+            }
+
+            labeledTextField(
+                label: "Syslog Message",
+                placeholder: "Syslog Message",
+                text: command.message
+            )
+
+            syslogPreview(command: command.wrappedValue)
+        }
+    }
+
+    private func syslogSeverityPicker(severity: Binding<SyslogSeverity>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Severity")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("", selection: severity) {
+                ForEach(SyslogSeverity.allCases) { severity in
+                    Text(severity.rawValue).tag(severity)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 150)
+        }
+    }
+
+    private func syslogPreview(command: UDPCommand) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Generated Syslog Preview")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(
+                SyslogMessageFormatter.formattedMessage(
+                    severity: command.syslogSeverity,
+                    deviceName: appState.syslogDeviceName,
+                    message: command.message
+                )
+            )
+            .font(.system(.caption, design: .monospaced))
+            .lineLimit(2)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
     }
 
     // MARK: - Utility Steps
@@ -938,21 +1043,23 @@ struct ActionEditorView: View {
             .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
     }
 
-    // MARK: - UDP Step Actions
+    // MARK: - Message Step Actions
 
-    private func addUDPStep(to actionIndex: Int) {
+    private func addMessageStep(to actionIndex: Int) {
         let step = UDPCommand(
-            name: "New UDP Step",
+            messageType: .standardUDP,
+            name: "New Message Step",
             host: appState.defaultDestinationHost,
             port: appState.defaultDestinationPort,
             message: "",
+            syslogSeverity: .info,
             delaySeconds: 0
         )
 
         appState.actionDefinitions[actionIndex].commands.append(step)
     }
 
-    private func deleteUDPStep(commandID: UUID, actionIndex: Int) {
+    private func deleteMessageStep(commandID: UUID, actionIndex: Int) {
         appState.actionDefinitions[actionIndex]
             .commands
             .removeAll {
@@ -960,7 +1067,7 @@ struct ActionEditorView: View {
             }
     }
 
-    private func moveUDPStepUp(actionIndex: Int, stepIndex: Int) {
+    private func moveMessageStepUp(actionIndex: Int, stepIndex: Int) {
         guard stepIndex > 0 else {
             return
         }
@@ -970,7 +1077,7 @@ struct ActionEditorView: View {
             .swapAt(stepIndex, stepIndex - 1)
     }
 
-    private func moveUDPStepDown(actionIndex: Int, stepIndex: Int) {
+    private func moveMessageStepDown(actionIndex: Int, stepIndex: Int) {
         let lastIndex = appState.actionDefinitions[actionIndex].commands.count - 1
 
         guard stepIndex < lastIndex else {

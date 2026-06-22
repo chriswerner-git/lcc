@@ -242,6 +242,19 @@ struct SetupView: View {
             }
 
             preferenceRow(
+                systemImage: "desktopcomputer",
+                title: "Syslog Device Name",
+                subtitle: "Hostname used inside generated Syslog messages."
+            ) {
+                TextField(
+                    "Device Name",
+                    text: $appState.syslogDeviceName
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 220)
+            }
+
+            preferenceRow(
                 systemImage: "power.circle.fill",
                 title: "Launch App at Startup",
                 subtitle: appState.launchAtStartupStatusMessage
@@ -314,6 +327,12 @@ struct SetupView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
+
+            Text("Syslog Device Name is stored on this Mac and is not included in configuration import/export. This allows each playback or control computer to identify itself independently.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
 
             Text("Prevent Computer Sleep keeps the Mac awake while Launch Control Center is running. It does not prevent sleep caused by closing a laptop lid, low battery, shutdown, restart, or choosing Sleep manually.")
                 .font(.caption)
