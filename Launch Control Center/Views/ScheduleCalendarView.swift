@@ -38,6 +38,7 @@ struct ScheduleCalendarView: View {
     @State private var visibleMonthDate: Date = Date()
 
     @State private var editingRequest: ScheduleEditRequest?
+    @State private var editOccurrenceConfirmation: ScheduleOccurrence?
     @State private var deletingOccurrence: ScheduleOccurrence?
     @State private var filteredSeriesID: UUID?
 
@@ -106,6 +107,19 @@ struct ScheduleCalendarView: View {
         )
     }
 
+    private var editOccurrenceDialogIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                editOccurrenceConfirmation != nil
+            },
+            set: { newValue in
+                if newValue == false {
+                    editOccurrenceConfirmation = nil
+                }
+            }
+        )
+    }
+
     var body: some View {
         ZStack {
             background
@@ -151,6 +165,31 @@ struct ScheduleCalendarView: View {
                 initialScope: request.initialScope
             )
             .environmentObject(appState)
+        }
+        .confirmationDialog(
+            "Edit This Occurrence",
+            isPresented: editOccurrenceDialogIsPresented,
+            titleVisibility: .visible
+        ) {
+            if let occurrence = editOccurrenceConfirmation {
+                Button("Create Standalone Event") {
+                    editingRequest = ScheduleEditRequest(
+                        occurrence: occurrence,
+                        initialScope: .thisOccurrence
+                    )
+                    editOccurrenceConfirmation = nil
+                }
+            }
+
+            Button("Cancel", role: .cancel) {
+                editOccurrenceConfirmation = nil
+            }
+        } message: {
+            if let occurrence = editOccurrenceConfirmation {
+                Text(editThisOccurrenceWarningText(for: occurrence))
+            } else {
+                Text("No Event selected.")
+            }
         }
         .confirmationDialog(
             "Delete Event",
@@ -580,10 +619,7 @@ struct ScheduleCalendarView: View {
                                 appState.runAction(occurrence.action)
                             },
                             editAction: { scope in
-                                editingRequest = ScheduleEditRequest(
-                                    occurrence: occurrence,
-                                    initialScope: scope
-                                )
+                                requestEdit(occurrence, scope: scope)
                             },
                             deleteAction: {
                                 deletingOccurrence = occurrence
@@ -614,10 +650,7 @@ struct ScheduleCalendarView: View {
                             appState.runAction(occurrence.action)
                         },
                         editAction: { occurrence, scope in
-                            editingRequest = ScheduleEditRequest(
-                                occurrence: occurrence,
-                                initialScope: scope
-                            )
+                            requestEdit(occurrence, scope: scope)
                         },
                         deleteAction: { occurrence in
                             deletingOccurrence = occurrence
@@ -732,6 +765,44 @@ struct ScheduleCalendarView: View {
         }
     }
 
+    // MARK: - Edit Handling
+
+    private func requestEdit(
+        _ occurrence: ScheduleOccurrence,
+        scope: ScheduleEditScope
+    ) {
+        if occurrence.event.repeatsDaily && scope == .thisOccurrence {
+            editOccurrenceConfirmation = occurrence
+            return
+        }
+
+        editingRequest = ScheduleEditRequest(
+            occurrence: occurrence,
+            initialScope: scope
+        )
+    }
+
+    private func editThisOccurrenceWarningText(for occurrence: ScheduleOccurrence) -> String {
+        let occurrenceText = Self.fullDateTimeFormatter.string(from: occurrence.occurrenceDate)
+        let seriesText = cleanedSeriesName(for: occurrence.event) ?? "Unnamed Series"
+        let frequencyText = ScheduleEntryFormatter.repeatSummary(
+            for: occurrence.event,
+            oneTimeText: "One time",
+            includeRepeatUntil: true
+        )
+
+        return """
+        This will remove the selected Event instance from the recurring series and create a new standalone Event using the same date, time, and Action. You can then edit it independently.
+
+        Occurrence: \(occurrenceText)
+        Series: \(seriesText)
+        Action: \(occurrence.action.name)
+        Frequency: \(frequencyText)
+
+        The rest of the series will remain scheduled.
+        """
+    }
+
     // MARK: - Delete Handling
 
     @ViewBuilder
@@ -776,6 +847,7 @@ struct ScheduleCalendarView: View {
 
     private func seriesDeleteWarningText(for occurrence: ScheduleOccurrence) -> String {
         let event = occurrence.event
+        let selectedOccurrenceText = Self.fullDateTimeFormatter.string(from: occurrence.occurrenceDate)
         let seriesNameText = cleanedSeriesName(for: event) ?? "Unnamed Series"
         let frequencyText = ScheduleEntryFormatter.repeatSummary(
             for: event,
@@ -786,15 +858,17 @@ struct ScheduleCalendarView: View {
         let instanceText = seriesInstanceWarningText(for: event)
 
         return """
-        You are about to delete the entire recurring Event series. This cannot be undone.
+        Selected occurrence: \(selectedOccurrenceText)
+
+        Choose “Delete This Occurrence” to permanently remove only this generated Event instance. The rest of the series will remain scheduled. This cannot be undone.
+
+        Choose “Delete Entire Series” to permanently delete the full recurring Event series. This cannot be undone.
 
         Series: \(seriesNameText)
         Action: \(occurrence.action.name)
         Frequency: \(frequencyText)
         End: \(endText)
         Instances: \(instanceText)
-
-        Choose “Delete This Occurrence” to remove only \(Self.fullDateTimeFormatter.string(from: occurrence.occurrenceDate)).
         """
     }
 
@@ -1537,6 +1611,7 @@ private struct ScheduleListOccurrenceRow: View {
         .padding(.vertical, 10)
         .opacity(occurrence.isEffectivelyScheduled ? 1.0 : 0.58)
         .contentShape(Rectangle())
+        .help(rowHelpText)
         .onTapGesture(count: 2) {
             editAction(occurrence.event.repeatsDaily ? .thisOccurrence : .entireSeries)
         }
@@ -1578,7 +1653,11 @@ private struct ScheduleListOccurrenceRow: View {
             Button(role: .destructive) {
                 deleteAction()
             } label: {
-                Label("Delete Event", systemImage: "trash")
+                if occurrence.event.repeatsDaily {
+                    Label("Delete…", systemImage: "trash")
+                } else {
+                    Label("Delete Event", systemImage: "trash")
+                }
             }
         }
     }
@@ -1619,12 +1698,29 @@ private struct ScheduleListOccurrenceRow: View {
     }
 
     private var seriesHelpText: String {
+        let summary = ScheduleEntryFormatter.repeatSummary(
+            for: occurrence.event,
+            oneTimeText: "One time",
+            includeRepeatUntil: true
+        )
+
         if let cleanedSeriesName {
-            return "Part of recurring series: \(cleanedSeriesName)"
+            return "Part of recurring series: \(cleanedSeriesName) • \(summary)"
         }
 
-        return "Part of a recurring series"
+        return "Part of a recurring series • \(summary)"
     }
+    private var rowHelpText: String {
+        let baseText = "\(timeText(for: occurrence.occurrenceDate)) — \(primaryDisplayName)"
+        let actionText = hasNamedSeries ? " • Action: \(occurrence.action.name)" : ""
+
+        guard occurrence.event.repeatsDaily else {
+            return "\(baseText)\(actionText)"
+        }
+
+        return "\(baseText)\(actionText) • \(seriesHelpText)"
+    }
+
 
     private var eventStatusText: String {
         if occurrence.isPast {
@@ -1840,7 +1936,11 @@ private struct CompactScheduleEventChip: View {
             Button(role: .destructive) {
                 deleteAction()
             } label: {
-                Label("Delete Event", systemImage: "trash")
+                if occurrence.event.repeatsDaily {
+                    Label("Delete…", systemImage: "trash")
+                } else {
+                    Label("Delete Event", systemImage: "trash")
+                }
             }
         }
     }
@@ -1870,11 +1970,17 @@ private struct CompactScheduleEventChip: View {
     }
 
     private var seriesHelpText: String {
+        let summary = ScheduleEntryFormatter.repeatSummary(
+            for: occurrence.event,
+            oneTimeText: "One time",
+            includeRepeatUntil: true
+        )
+
         if let cleanedSeriesName {
-            return "Part of recurring series: \(cleanedSeriesName)"
+            return "Part of recurring series: \(cleanedSeriesName) • \(summary)"
         }
 
-        return "Part of a recurring series"
+        return "Part of a recurring series • \(summary)"
     }
 
     private var actionColor: Color {
@@ -2148,19 +2254,29 @@ private struct ScheduleEventEditSheet: View {
                 scopePicker
             }
 
-            actionPicker
-            dateTimeSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    actionPicker
+                    dateTimeSection
 
-            if editScope == .entireSeries {
-                repeatSection
-            } else {
-                singleOccurrenceNote
+                    if editScope == .entireSeries {
+                        repeatSection
+
+                        if repeatsDaily {
+                            seriesPreviewCard
+                        }
+                    } else {
+                        singleOccurrenceNote
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             footer
         }
         .padding(20)
-        .frame(width: 620, height: editScope == .entireSeries ? 760 : 500)
+        .frame(width: 620, height: editScope == .entireSeries ? 740 : 500)
         .onChange(of: editScope) { _, newScope in
             if newScope == .entireSeries {
                 loadDateAndTime(from: occurrence.event.startDate)
@@ -2410,6 +2526,240 @@ private struct ScheduleEventEditSheet: View {
         .tint(isSelected ? .blue : .secondary)
     }
 
+    private var seriesPreviewCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.stack")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+
+                Text("Series Preview")
+                    .font(.caption)
+                    .bold()
+
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                previewSummaryLine("Schedule", previewScheduleDescription)
+                previewSummaryLine("Generated Events", previewTotalCountText)
+                previewSummaryLine("Selected Days", ScheduleEntryFormatter.weekdaySummary(for: repeatWeekdays))
+                previewSummaryLine("Per Selected Day", previewOccurrencesPerActiveDayText)
+
+                if repeatMode == .intervalDuringDay {
+                    previewSummaryLine("Daily Final Run", previewDailyFinalRunText)
+                }
+            }
+
+            Divider()
+                .opacity(0.35)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Next Generated Events")
+                    .font(.caption2)
+                    .bold()
+                    .foregroundStyle(.secondary)
+
+                if previewOccurrences.isEmpty {
+                    Text("No occurrences are generated by these settings.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    ForEach(previewOccurrences, id: \.timeIntervalSince1970) { occurrenceDate in
+                        HStack(spacing: 8) {
+                            Image(systemName: "rectangle.stack")
+                                .font(.caption2)
+                                .foregroundStyle(.blue)
+
+                            Text(Self.previewFormatter.string(from: occurrenceDate))
+                                .font(.caption2)
+                                .monospacedDigit()
+
+                            Spacer()
+                        }
+                    }
+
+                    if previewTotalOccurrenceCount > previewOccurrences.count {
+                        Text("…and \(previewTotalOccurrenceCount - previewOccurrences.count) more in this series.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func previewSummaryLine(
+        _ label: String,
+        _ value: String
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(width: 104, alignment: .leading)
+
+            Text(value)
+                .font(.caption2)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var previewScheduleDescription: String {
+        guard let previewEvent else {
+            return "Incomplete schedule."
+        }
+
+        return ScheduleEntryFormatter.repeatSummary(
+            for: previewEvent,
+            oneTimeText: "One-time",
+            includeRepeatUntil: true
+        )
+    }
+
+    private var previewTotalCountText: String {
+        let count = previewTotalOccurrenceCount
+        return "\(count) Event\(count == 1 ? "" : "s")"
+    }
+
+    private var previewOccurrencesPerActiveDayText: String {
+        guard let previewEvent else {
+            return "—"
+        }
+
+        let count = firstActiveDayOccurrences(for: previewEvent).count
+        return "\(count) Event\(count == 1 ? "" : "s")"
+    }
+
+    private var previewDailyFinalRunText: String {
+        guard let previewEvent,
+              let finalRun = firstActiveDayOccurrences(for: previewEvent).last else {
+            return "No daily occurrence generated."
+        }
+
+        return Self.previewTimeFormatter.string(from: finalRun)
+    }
+
+    private var previewOccurrences: [Date] {
+        guard let previewEvent else {
+            return []
+        }
+
+        return generatedPreviewOccurrences(
+            for: previewEvent,
+            limit: 12
+        )
+    }
+
+    private var previewTotalOccurrenceCount: Int {
+        guard let previewEvent else {
+            return 0
+        }
+
+        return generatedPreviewOccurrences(
+            for: previewEvent,
+            limit: 10_000
+        ).count
+    }
+
+    private var previewEvent: ScheduleEntry? {
+        guard let selectedActionID else {
+            return nil
+        }
+
+        let startDate = composedDate()
+        let endDate = endOfDay(for: repeatUntil)
+
+        return ScheduleEntry(
+            id: occurrence.event.id,
+            seriesID: occurrence.event.seriesID ?? UUID(),
+            seriesName: cleanedSeriesName,
+            actionDefinitionID: selectedActionID,
+            startDate: startDate,
+            enabled: occurrence.event.enabled,
+            repeatsDaily: true,
+            repeatWeekdays: repeatWeekdays,
+            repeatUntil: endDate,
+            repeatMode: repeatMode,
+            intervalMinutes: repeatMode == .intervalDuringDay ? intervalMinutes : nil,
+            intervalEndTime: repeatMode == .intervalDuringDay ? intervalEndDateOnSelectedDate : nil,
+            seriesEndDate: endDate,
+            excludedOccurrenceDates: occurrence.event.excludedOccurrenceDates,
+            excludedOccurrenceKeys: occurrence.event.excludedOccurrenceKeys
+        )
+    }
+
+    private func firstActiveDayOccurrences(for previewEvent: ScheduleEntry) -> [Date] {
+        let calendar = Calendar.current
+        var day = calendar.startOfDay(for: previewEvent.startDate)
+        let finalDay = calendar.startOfDay(for: previewEvent.repeatUntil ?? previewEvent.startDate)
+        var guardCount = 0
+
+        while day <= finalDay, guardCount < 370 {
+            let occurrences = ScheduleEntryFormatter.occurrenceDates(
+                for: previewEvent,
+                on: day,
+                calendar: calendar
+            )
+            .filter { $0 >= previewEvent.startDate }
+            .sorted()
+
+            if occurrences.isEmpty == false {
+                return occurrences
+            }
+
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+                break
+            }
+
+            day = nextDay
+            guardCount += 1
+        }
+
+        return []
+    }
+
+    private func generatedPreviewOccurrences(
+        for previewEvent: ScheduleEntry,
+        limit: Int
+    ) -> [Date] {
+        let calendar = Calendar.current
+        var occurrences: [Date] = []
+        var day = calendar.startOfDay(for: previewEvent.startDate)
+        let finalDay = calendar.startOfDay(for: previewEvent.repeatUntil ?? previewEvent.startDate)
+        var guardCount = 0
+
+        while day <= finalDay, occurrences.count < limit, guardCount < 370 {
+            occurrences.append(
+                contentsOf: ScheduleEntryFormatter.occurrenceDates(
+                    for: previewEvent,
+                    on: day,
+                    calendar: calendar
+                )
+            )
+
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+                break
+            }
+
+            day = nextDay
+            guardCount += 1
+        }
+
+        return occurrences
+            .filter { $0 >= previewEvent.startDate }
+            .sorted()
+            .prefix(limit)
+            .map { $0 }
+    }
+
     private var footer: some View {
         HStack {
             Button("Cancel") {
@@ -2612,6 +2962,19 @@ private struct ScheduleEventEditSheet: View {
             to: startDate
         ) ?? startDate
     }
+
+    private static let previewFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, MMM d • h:mm:ss a"
+        return formatter
+    }()
+
+    private static let previewTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .medium
+        formatter.dateStyle = .none
+        return formatter
+    }()
 }
 
 // MARK: - Models
