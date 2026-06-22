@@ -37,6 +37,17 @@ final class UDPService: ObservableObject {
     private var listenerTimeoutTimer: Timer?
     private var listenerCancellationStatusMessage: String = "UDP listener stopped"
 
+    // UDP output is intentionally serialized.
+    //
+    // Launch Control Center may fire Actions from manual controls, schedule
+    // evaluation, or future utility paths.  A dedicated serial queue keeps
+    // outbound UDP messages in call order and avoids creating an unbounded
+    // number of global worker tasks during bursts.
+    private let sendQueue = DispatchQueue(
+        label: "com.lunartelephone.launchcontrolcenter.udp.send",
+        qos: .userInitiated
+    )
+
     // MARK: - Constants
 
     private let listenerTimeoutSeconds: TimeInterval = 10 * 60
@@ -233,7 +244,7 @@ final class UDPService: ObservableObject {
             return
         }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        sendQueue.async { [weak self] in
             self?.sendUsingSocket(
                 message: message,
                 host: destinationHost,
@@ -329,3 +340,4 @@ final class UDPService: ObservableObject {
         )
     }
 }
+
