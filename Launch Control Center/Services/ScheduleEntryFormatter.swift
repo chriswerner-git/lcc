@@ -249,26 +249,62 @@ enum ScheduleEntryFormatter {
     }
 
     /// Returns the occurrence that should be evaluated by the 10 Hz scheduler
-    /// for the current tick. For interval repeats, this returns the most recent
-    /// occurrence at or before `now`, allowing AppState's existing fire-tolerance
-    /// check and occurrence guard to decide whether it should actually run.
+    /// for the current tick.
+    ///
+    /// This intentionally avoids generating an entire day of interval occurrences
+    /// on every scheduler tick. The schedule engine runs at 10 Hz, so interval
+    /// Events need a direct calculation path here for long-running efficiency.
+    /// The returned Date is still checked by AppState's existing fire-tolerance
+    /// and occurrence de-duplication guard before anything executes.
     static func occurrenceDateForScheduleProcessing(
         for event: ScheduleEntry,
         now: Date,
         calendar: Calendar = .current
     ) -> Date? {
-        let todayOccurrences = occurrenceDates(
-            for: event,
-            on: now,
-            calendar: calendar
-        )
-        .sorted()
+        if event.repeatsDaily == false {
+            guard calendar.isDate(event.startDate, inSameDayAs: now),
+                  occurrenceIsNotExcluded(
+                    event,
+                    occurrenceDate: event.startDate,
+                    calendar: calendar
+                  ) else {
+                return nil
+            }
 
-        guard todayOccurrences.isEmpty == false else {
+            return event.startDate
+        }
+
+        let dayStart = calendar.startOfDay(for: now)
+
+        guard eventCanOccur(on: dayStart, event: event, calendar: calendar) else {
             return nil
         }
 
-        return todayOccurrences.last { $0 <= now } ?? todayOccurrences.first
+        switch event.repeatMode {
+        case .oncePerSelectedDay:
+            guard let occurrenceDate = date(
+                on: dayStart,
+                usingTimeFrom: event.startDate,
+                calendar: calendar
+            ),
+            occurrenceIsNotExcluded(
+                event,
+                occurrenceDate: occurrenceDate,
+                calendar: calendar
+            ) else {
+                return nil
+            }
+
+            return occurrenceDate
+
+        case .intervalDuringDay:
+            return intervalOccurrenceDateForScheduleProcessing(
+                for: event,
+                on: dayStart,
+                now: now,
+                calendar: calendar
+            )
+        }
     }
 
     static func occurrenceKey(
@@ -307,6 +343,76 @@ enum ScheduleEntryFormatter {
 
         let weekday = calendar.component(.weekday, from: dayStart)
         return selectedWeekdays(for: event).contains(weekday)
+    }
+
+    private static func intervalOccurrenceDateForScheduleProcessing(
+        for event: ScheduleEntry,
+        on dayStart: Date,
+        now: Date,
+        calendar: Calendar
+    ) -> Date? {
+        guard let intervalMinutes = event.intervalMinutes,
+              intervalMinutes > 0,
+              let intervalEndTime = event.intervalEndTime,
+              let firstOccurrence = date(
+                on: dayStart,
+                usingTimeFrom: event.startDate,
+                calendar: calendar
+              ),
+              let finalOccurrenceBoundary = date(
+                on: dayStart,
+                usingTimeFrom: intervalEndTime,
+                calendar: calendar
+              ) else {
+            return nil
+        }
+
+        // Same-day interval repeats intentionally may not cross midnight in v1.
+        guard finalOccurrenceBoundary >= firstOccurrence else {
+            return nil
+        }
+
+        let intervalSeconds = TimeInterval(intervalMinutes * 60)
+
+        if now < firstOccurrence {
+            return occurrenceIsNotExcluded(
+                event,
+                occurrenceDate: firstOccurrence,
+                calendar: calendar
+            ) ? firstOccurrence : nil
+        }
+
+        let elapsedSeconds = now.timeIntervalSince(firstOccurrence)
+        var stepCount = Int(floor(elapsedSeconds / intervalSeconds))
+        let maximumStepCount = Int(floor(finalOccurrenceBoundary.timeIntervalSince(firstOccurrence) / intervalSeconds))
+
+        stepCount = min(max(stepCount, 0), maximumStepCount)
+
+        // Walk backward over excluded occurrences. In normal operation this loop
+        // exits immediately. It only iterates when an operator has removed one
+        // or more generated instances from a recurring series.
+        while stepCount >= 0 {
+            let candidate = firstOccurrence.addingTimeInterval(
+                TimeInterval(stepCount) * intervalSeconds
+            )
+
+            guard candidate <= finalOccurrenceBoundary else {
+                stepCount -= 1
+                continue
+            }
+
+            if occurrenceIsNotExcluded(
+                event,
+                occurrenceDate: candidate,
+                calendar: calendar
+            ) {
+                return candidate
+            }
+
+            stepCount -= 1
+        }
+
+        return nil
     }
 
     private static func intervalOccurrenceDates(
