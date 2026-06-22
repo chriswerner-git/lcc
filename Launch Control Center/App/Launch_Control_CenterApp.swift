@@ -13,8 +13,19 @@
 import AppKit
 import SwiftUI
 
+final class LaunchControlCenterAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        OperationalLogService.shared.info("Application will terminate.")
+        OperationalLogService.shared.flushAndClose()
+    }
+}
+
 @main
 struct Launch_Control_CenterApp: App {
+    // MARK: - App Delegate
+
+    @NSApplicationDelegateAdaptor(LaunchControlCenterAppDelegate.self) private var appDelegate
+
     // MARK: - App State
 
     @StateObject private var appState = AppState()

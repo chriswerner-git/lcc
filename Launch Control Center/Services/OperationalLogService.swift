@@ -42,12 +42,20 @@ final class OperationalLogService {
     private let timestampFormatter: DateFormatter
     private let fileDateFormatter: DateFormatter
 
+    // These values are accessed only from the serial logging queue.
+    private var activeFileHandle: FileHandle?
+    private var activeLogFileURL: URL?
+
     private init() {
         timestampFormatter = DateFormatter()
         timestampFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
 
         fileDateFormatter = DateFormatter()
         fileDateFormatter.dateFormat = "yyyy-MM-dd"
+    }
+
+    deinit {
+        closeActiveFileHandle(synchronize: true)
     }
 
     // MARK: - Public Logging
@@ -79,6 +87,17 @@ final class OperationalLogService {
         }
     }
 
+    /// Flushes pending log writes and closes the active file handle.
+    ///
+    /// This should be called during normal app termination. The method waits for any
+    /// queued log writes to finish before closing the handle, which avoids leaving the
+    /// last few lifecycle messages stranded in the logging queue during a graceful quit.
+    func flushAndClose() {
+        queue.sync { [weak self] in
+            self?.closeActiveFileHandle(synchronize: true)
+        }
+    }
+
     // MARK: - Folder Access
 
     var logsFolderURL: URL? {
@@ -98,6 +117,62 @@ final class OperationalLogService {
 
     @discardableResult
     func purgeLogFilesOlderThan(days: Int) throws -> Int {
+        var purgeResult: Result<Int, Error>!
+
+        queue.sync { [weak self] in
+            guard let self else {
+                purgeResult = .success(0)
+                return
+            }
+
+            do {
+                // Close the active handle before pruning so the currently open file is
+                // never deleted or rotated underneath an active FileHandle.
+                closeActiveFileHandle(synchronize: true)
+
+                let deletedCount = try purgeLogFilesOlderThanSynchronously(days: days)
+                purgeResult = .success(deletedCount)
+            } catch {
+                purgeResult = .failure(error)
+            }
+        }
+
+        return try purgeResult.get()
+    }
+
+    // MARK: - Private Write
+
+    private func writeSynchronously(
+        level: Level,
+        message: String,
+        date: Date
+    ) {
+        do {
+            let logsFolderURL = try createLogsFolderIfNeeded()
+            let logFileURL = try currentLogFileURL(
+                in: logsFolderURL,
+                date: date
+            )
+
+            let cleanMessage = sanitized(message)
+            let timestamp = timestampFormatter.string(from: date)
+            let line = "[\(timestamp)] [\(level.rawValue)] \(cleanMessage)\n"
+
+            guard let data = line.data(using: .utf8) else {
+                return
+            }
+
+            let fileHandle = try fileHandleForWriting(to: logFileURL)
+            try fileHandle.write(contentsOf: data)
+        } catch {
+            closeActiveFileHandle(synchronize: false)
+            NSLog("Launch Control Center log write failed: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Private Log Pruning
+
+    private func purgeLogFilesOlderThanSynchronously(days: Int) throws -> Int {
         let safeDays = max(days, 1)
         let logsFolderURL = try createLogsFolderIfNeeded()
         let cutoffDate = Date().addingTimeInterval(-Double(safeDays) * 86_400)
@@ -144,46 +219,50 @@ final class OperationalLogService {
         return deletedCount
     }
 
-    // MARK: - Private Write
+    // MARK: - File Handle Management
 
-    private func writeSynchronously(
-        level: Level,
-        message: String,
-        date: Date
-    ) {
-        do {
-            let logsFolderURL = try createLogsFolderIfNeeded()
-            let logFileURL = try currentLogFileURL(
-                in: logsFolderURL,
-                date: date
-            )
-
-            let cleanMessage = sanitized(message)
-            let timestamp = timestampFormatter.string(from: date)
-            let line = "[\(timestamp)] [\(level.rawValue)] \(cleanMessage)\n"
-
-            guard let data = line.data(using: .utf8) else {
-                return
-            }
-
-            if FileManager.default.fileExists(atPath: logFileURL.path) == false {
-                FileManager.default.createFile(
-                    atPath: logFileURL.path,
-                    contents: nil
-                )
-            }
-
-            let fileHandle = try FileHandle(forWritingTo: logFileURL)
-
-            defer {
-                try? fileHandle.close()
-            }
-
-            try fileHandle.seekToEnd()
-            try fileHandle.write(contentsOf: data)
-        } catch {
-            NSLog("Launch Control Center log write failed: \(error.localizedDescription)")
+    private func fileHandleForWriting(to logFileURL: URL) throws -> FileHandle {
+        if let activeFileHandle,
+           activeLogFileURL == logFileURL {
+            return activeFileHandle
         }
+
+        closeActiveFileHandle(synchronize: true)
+
+        if FileManager.default.fileExists(atPath: logFileURL.path) == false {
+            FileManager.default.createFile(
+                atPath: logFileURL.path,
+                contents: nil
+            )
+        }
+
+        let fileHandle = try FileHandle(forWritingTo: logFileURL)
+        try fileHandle.seekToEnd()
+
+        activeFileHandle = fileHandle
+        activeLogFileURL = logFileURL
+
+        return fileHandle
+    }
+
+    private func closeActiveFileHandle(synchronize: Bool) {
+        guard let fileHandle = activeFileHandle else {
+            activeLogFileURL = nil
+            return
+        }
+
+        if synchronize {
+            fileHandle.synchronizeFile()
+        }
+
+        do {
+            try fileHandle.close()
+        } catch {
+            NSLog("Launch Control Center log close failed: \(error.localizedDescription)")
+        }
+
+        activeFileHandle = nil
+        activeLogFileURL = nil
     }
 
     // MARK: - File Helpers
@@ -257,3 +336,4 @@ final class OperationalLogService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
+
