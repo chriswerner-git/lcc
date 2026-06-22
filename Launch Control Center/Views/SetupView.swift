@@ -255,6 +255,24 @@ struct SetupView: View {
             }
 
             preferenceRow(
+                systemImage: "dock.rectangle",
+                title: "Dock Icon",
+                subtitle: appState.dockIconVisibilityPreference.preferenceDescription
+            ) {
+                Picker(
+                    "",
+                    selection: $appState.dockIconVisibilityPreference
+                ) {
+                    ForEach(DockIconVisibilityPreference.allCases) { preference in
+                        Text(preference.displayName).tag(preference)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 270)
+            }
+
+            preferenceRow(
                 systemImage: "power.circle.fill",
                 title: "Launch App at Startup",
                 subtitle: appState.launchAtStartupStatusMessage
@@ -302,7 +320,14 @@ struct SetupView: View {
                 HStack(spacing: 6) {
                     TextField(
                         "90",
-                        value: $appState.operationalLogRetentionDays,
+                        value: Binding(
+                            get: {
+                                appState.operationalLogRetentionDays
+                            },
+                            set: { newValue in
+                                appState.operationalLogRetentionDays = min(max(newValue, 1), 3650)
+                            }
+                        ),
                         format: .number.grouping(.never)
                     )
                     .textFieldStyle(.roundedBorder)
@@ -328,7 +353,7 @@ struct SetupView: View {
                 .controlSize(.small)
             }
 
-            Text("Syslog Device Name is stored on this Mac and is not included in configuration import/export. This allows each playback or control computer to identify itself independently.")
+            Text("Syslog Device Name and Dock Icon visibility are stored on this Mac and are not included in configuration import/export. This allows each playback or control computer to identify itself independently.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -774,11 +799,15 @@ struct SetupView: View {
         return "\(project)_\(dateStamp)"
     }
 
-    private func reverseDateStamp(_ date: Date) -> String {
+    private static let reverseDateStampFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd"
+        return formatter
+    }()
 
-        return formatter.string(from: date)
+    private func reverseDateStamp(_ date: Date) -> String {
+        SetupView.reverseDateStampFormatter.string(from: date)
     }
 
     private func urlWithLaunchControlExtension(_ url: URL) -> URL {
@@ -942,3 +971,4 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
         }
     }
 }
+

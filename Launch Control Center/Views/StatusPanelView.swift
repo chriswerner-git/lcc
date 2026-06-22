@@ -174,22 +174,44 @@ struct DashboardClockView: View {
 
     // MARK: - Date Formatting
 
-    private func dayOfWeek(_ date: Date) -> String {
+    private static let dayOfWeekFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE"
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private static let calendarDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMMM yyyy"
+        return formatter
+    }()
+
+    private static let clockTime24HourFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let clockTime12HourFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm:ss a"
+        return formatter
+    }()
+
+    private func dayOfWeek(_ date: Date) -> String {
+        DashboardClockView.dayOfWeekFormatter.string(from: date)
     }
 
     private func calendarDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMMM yyyy"
-        return formatter.string(from: date)
+        DashboardClockView.calendarDateFormatter.string(from: date)
     }
 
     private func clockTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = appState.use24HourTime ? "HH:mm:ss" : "h:mm:ss a"
-        return formatter.string(from: date)
+        if appState.use24HourTime {
+            return DashboardClockView.clockTime24HourFormatter.string(from: date)
+        }
+
+        return DashboardClockView.clockTime12HourFormatter.string(from: date)
     }
 }
 
@@ -658,14 +680,24 @@ struct EventSummaryView: View {
         }
     }
 
-    private func formattedDateTime(_ date: Date) -> String {
+    private static let dateTime24HourFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, d MMM yyyy HH:mm:ss"
+        return formatter
+    }()
 
-        formatter.dateFormat = appState.use24HourTime
-            ? "EEE, d MMM yyyy HH:mm:ss"
-            : "EEE, d MMM yyyy h:mm:ss a"
+    private static let dateTime12HourFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, d MMM yyyy h:mm:ss a"
+        return formatter
+    }()
 
-        return formatter.string(from: date)
+    private func formattedDateTime(_ date: Date) -> String {
+        if appState.use24HourTime {
+            return EventSummaryView.dateTime24HourFormatter.string(from: date)
+        }
+
+        return EventSummaryView.dateTime12HourFormatter.string(from: date)
     }
 
     private func countdown(to date: Date, from now: Date) -> String {
@@ -700,3 +732,4 @@ private var dashboardCardBorder: some View {
     RoundedRectangle(cornerRadius: 16, style: .continuous)
         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
 }
+

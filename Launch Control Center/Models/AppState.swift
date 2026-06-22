@@ -20,8 +20,47 @@
 //  - Utility Actions execute dashboard-level Utility steps.
 //
 
+import AppKit
 import Combine
 import Foundation
+
+// MARK: - Dock Icon Visibility Preference
+
+enum DockIconVisibilityPreference: String, CaseIterable, Identifiable {
+    case always
+    case never
+    case showWhenDashboardWindowIsOpen
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .always:
+            return "Always"
+
+        case .never:
+            return "Never"
+
+        case .showWhenDashboardWindowIsOpen:
+            return "Dashboard Open"
+        }
+    }
+
+    var preferenceDescription: String {
+        switch self {
+        case .always:
+            return "The Dock icon is always visible while Launch Control Center is running."
+
+        case .never:
+            return "The Dock icon stays hidden. Use the menu bar icon to open windows."
+
+        case .showWhenDashboardWindowIsOpen:
+            return "The Dock icon appears while the Dashboard window is open."
+        }
+    }
+}
 
 final class AppState: ObservableObject {
     let udpService = UDPService()
@@ -85,10 +124,6 @@ final class AppState: ObservableObject {
                 safeValue,
                 forKey: "operationalLogRetentionDays"
             )
-
-            if safeValue != operationalLogRetentionDays {
-                operationalLogRetentionDays = safeValue
-            }
         }
     }
 
@@ -100,6 +135,19 @@ final class AppState: ObservableObject {
             )
         }
     }
+
+    @Published var dockIconVisibilityPreference: DockIconVisibilityPreference {
+        didSet {
+            UserDefaults.standard.set(
+                dockIconVisibilityPreference.rawValue,
+                forKey: "dockIconVisibilityPreference"
+            )
+
+            applyDockIconVisibilityPreference()
+        }
+    }
+
+    @Published private(set) var dashboardWindowIsOpen: Bool = false
 
     // MARK: - System Lifecycle
 
@@ -231,8 +279,12 @@ final class AppState: ObservableObject {
 
     init() {
         self.preventComputerSleepEnabled = UserDefaults.standard.object(forKey: "preventComputerSleepEnabled") as? Bool ?? false
-        self.operationalLogRetentionDays = UserDefaults.standard.object(forKey: "operationalLogRetentionDays") as? Int ?? 90
+        let savedLogRetentionDays = UserDefaults.standard.object(forKey: "operationalLogRetentionDays") as? Int ?? 90
+        self.operationalLogRetentionDays = AppState.clampedOperationalLogRetentionDays(savedLogRetentionDays)
         self.syslogDeviceName = UserDefaults.standard.string(forKey: "syslogDeviceName") ?? AppState.defaultSyslogDeviceName()
+
+        let savedDockIconPreference = UserDefaults.standard.string(forKey: "dockIconVisibilityPreference")
+        self.dockIconVisibilityPreference = DockIconVisibilityPreference(rawValue: savedDockIconPreference ?? "") ?? .showWhenDashboardWindowIsOpen
 
         self.projectName = UserDefaults.standard.string(forKey: "projectName") ?? "Untitled Project"
         self.projectNotes = UserDefaults.standard.string(forKey: "projectNotes") ?? ""
@@ -273,6 +325,7 @@ final class AppState: ObservableObject {
 
         refreshLaunchAtStartupStatus()
         applyPreventComputerSleepPreference()
+        applyDockIconVisibilityPreference()
         startSystemLifecycleMonitoring()
         startScheduleEngine()
         startDailyHealthLogging()
@@ -301,6 +354,32 @@ final class AppState: ObservableObject {
         let trimmedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return trimmedCandidate.isEmpty ? "Launch-Control-Center" : trimmedCandidate
+    }
+
+    // MARK: - Dock Icon Visibility
+
+    func setDashboardWindowIsOpen(_ isOpen: Bool) {
+        dashboardWindowIsOpen = isOpen
+        applyDockIconVisibilityPreference()
+    }
+
+    func applyDockIconVisibilityPreference() {
+        let shouldShowDockIcon: Bool
+
+        switch dockIconVisibilityPreference {
+        case .always:
+            shouldShowDockIcon = true
+
+        case .never:
+            shouldShowDockIcon = false
+
+        case .showWhenDashboardWindowIsOpen:
+            shouldShowDockIcon = dashboardWindowIsOpen
+        }
+
+        NSApplication.shared.setActivationPolicy(
+            shouldShowDockIcon ? .regular : .accessory
+        )
     }
 
     // MARK: - Launch at Startup
@@ -425,8 +504,12 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func clampedOperationalLogRetentionDays(_ value: Int) -> Int {
+    private static func clampedOperationalLogRetentionDays(_ value: Int) -> Int {
         min(max(value, 1), 3650)
+    }
+
+    private func clampedOperationalLogRetentionDays(_ value: Int) -> Int {
+        AppState.clampedOperationalLogRetentionDays(value)
     }
 
     // MARK: - Daily Health Logging
@@ -732,6 +815,10 @@ final class AppState: ObservableObject {
         case .scheduled:
             lastMessage = "Scheduled Action started: \(action.name)"
             logger.info(lastMessage)
+
+        case .automated:
+            lastMessage = "Automated Action started: \(action.name)"
+            logger.info(lastMessage)
         }
 
         let completed: Bool
@@ -763,6 +850,9 @@ final class AppState: ObservableObject {
 
         case .scheduled:
             lastMessage = "Ran Scheduled Action: \(action.name)"
+
+        case .automated:
+            lastMessage = "Ran Automated Action: \(action.name)"
         }
 
         lastEventMessage = "\(timestamp) — \(action.name)"
@@ -782,6 +872,9 @@ final class AppState: ObservableObject {
 
             case .scheduled:
                 lastMessage = "Skipped scheduled Action already running: \(action.name)"
+
+            case .automated:
+                lastMessage = "Skipped Automated Action already running: \(action.name)"
             }
 
             logger.warning(lastMessage)
@@ -1002,7 +1095,7 @@ final class AppState: ObservableObject {
 
         await executeAction(
             targetAction,
-            source: .manual,
+            source: .automated,
             visitedActionIDs: updatedVisitedActionIDs
         )
 
@@ -1401,17 +1494,35 @@ final class AppState: ObservableObject {
         } == false
     }
 
+    private static let processedOccurrenceDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private static let eventTimestamp24HourFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    private static let eventTimestamp12HourFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd h:mm:ss a"
+        return formatter
+    }()
+
     private func processedOccurrenceKey(
         event: ScheduleEntry,
         occurrenceDate: Date
     ) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-
         let dateKey: String
 
         if event.repeatsDaily {
-            dateKey = dateFormatter.string(from: occurrenceDate)
+            dateKey = AppState.processedOccurrenceDateFormatter.string(from: occurrenceDate)
         } else {
             dateKey = String(Int(event.startDate.timeIntervalSince1970))
         }
@@ -1434,9 +1545,11 @@ final class AppState: ObservableObject {
     // MARK: - Formatting
 
     private func formattedEventTimestamp(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = use24HourTime ? "yyyy-MM-dd HH:mm:ss" : "yyyy-MM-dd h:mm:ss a"
-        return formatter.string(from: date)
+        if use24HourTime {
+            return AppState.eventTimestamp24HourFormatter.string(from: date)
+        }
+
+        return AppState.eventTimestamp12HourFormatter.string(from: date)
     }
 }
 
@@ -1669,4 +1782,6 @@ private struct LaunchControlConfiguration: Codable {
 private enum ActionRunSource {
     case manual
     case scheduled
+    case automated
 }
+

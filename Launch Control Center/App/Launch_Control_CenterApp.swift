@@ -23,13 +23,6 @@ struct Launch_Control_CenterApp: App {
 
     @Environment(\.openWindow) private var openWindow
 
-    // MARK: - Init
-
-    init() {
-        NSApplication.shared.setActivationPolicy(.regular)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-    }
-
     // MARK: - Scenes
 
     var body: some Scene {
@@ -49,7 +42,11 @@ struct Launch_Control_CenterApp: App {
             ContentView()
                 .environmentObject(appState)
                 .onAppear {
+                    appState.setDashboardWindowIsOpen(true)
                     activateApp()
+                }
+                .onDisappear {
+                    appState.setDashboardWindowIsOpen(false)
                 }
         }
         .defaultSize(width: 1400, height: 1030)
@@ -233,3 +230,4 @@ struct Launch_Control_CenterApp: App {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
+

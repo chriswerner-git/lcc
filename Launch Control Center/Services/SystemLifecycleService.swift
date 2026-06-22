@@ -19,7 +19,7 @@ final class SystemLifecycleService {
     enum Event {
         case willSleep(Date)
         case didWake(Date)
-        case didBecomeActive(Date)
+        case didBecomeActive
         case willTerminate(Date)
     }
 
@@ -59,7 +59,7 @@ final class SystemLifecycleService {
             center: NotificationCenter.default,
             name: NSApplication.didBecomeActiveNotification
         ) { _ in
-            handler(.didBecomeActive(Date()))
+            handler(.didBecomeActive)
         }
 
         addObserver(
@@ -107,3 +107,4 @@ final class SystemLifecycleService {
         )
     }
 }
+

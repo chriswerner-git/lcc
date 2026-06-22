@@ -17,30 +17,25 @@ struct TodayScheduleView: View {
 
     @EnvironmentObject var appState: AppState
 
-    // MARK: - Derived Events
-
-    private var todaysEvents: [ScheduleEntry] {
-        appState.scheduleEntries
-            .filter { eventIsToday($0) }
-            .sorted {
-                occurrenceDateToday(for: $0) < occurrenceDateToday(for: $1)
-            }
-    }
-
     // MARK: - Body
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { context in
-            let nextEventID = nextUpcomingEventID(now: context.date)
+            let scheduleItems = todaysScheduleItems(referenceDate: context.date)
+            let nextEventID = nextUpcomingEventID(
+                now: context.date,
+                items: scheduleItems
+            )
 
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeader
+                sectionHeader(eventCount: scheduleItems.count)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    if todaysEvents.isEmpty {
+                    if scheduleItems.isEmpty {
                         emptyState
                     } else {
                         eventList(
+                            items: scheduleItems,
                             now: context.date,
                             nextEventID: nextEventID
                         )
@@ -56,12 +51,12 @@ struct TodayScheduleView: View {
 
     // MARK: - Header
 
-    private var sectionHeader: some View {
+    private func sectionHeader(eventCount: Int) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Today's Events")
                 .font(.headline)
 
-            Text("\(todaysEvents.count) scheduled")
+            Text("\(eventCount) scheduled")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -73,25 +68,24 @@ struct TodayScheduleView: View {
     // MARK: - Event List
 
     private func eventList(
+        items: [TodayScheduleItem],
         now: Date,
         nextEventID: UUID?
     ) -> some View {
         ScrollViewReader { scrollProxy in
             ScrollView(.vertical) {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(todaysEvents) { event in
-                        let occurrenceDate = occurrenceDateToday(for: event)
-
+                    ForEach(items) { item in
                         ScheduleEntryRow(
-                            event: event,
-                            occurrenceDate: occurrenceDate,
-                            isPast: occurrenceDate < now,
-                            isNext: event.id == nextEventID
+                            event: item.event,
+                            occurrenceDate: item.occurrenceDate,
+                            isPast: item.occurrenceDate < now,
+                            isNext: item.id == nextEventID
                         )
                         .environmentObject(appState)
-                        .id(event.id)
+                        .id(item.id)
 
-                        if event.id != todaysEvents.last?.id {
+                        if item.id != items.last?.id {
                             Divider()
                                 .opacity(0.28)
                                 .padding(.leading, 24)
@@ -114,7 +108,7 @@ struct TodayScheduleView: View {
                     animated: true
                 )
             }
-            .onChange(of: todaysEvents.map(\.id)) { _, _ in
+            .onChange(of: items.map(\.id)) { _, _ in
                 scrollToNextEvent(
                     nextEventID,
                     using: scrollProxy,
@@ -132,7 +126,7 @@ struct TodayScheduleView: View {
                 .font(.system(size: 24, weight: .regular))
                 .foregroundStyle(.secondary)
 
-            Text("No Events scheduled for today.")
+            Text("No enabled Events scheduled for today.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -162,21 +156,40 @@ struct TodayScheduleView: View {
         }
     }
 
-    // MARK: - Date Helpers
+    // MARK: - Schedule Item Calculation
 
-    private func nextUpcomingEventID(now: Date) -> UUID? {
-        todaysEvents
-            .filter { occurrenceDateToday(for: $0) >= now }
-            .sorted {
-                occurrenceDateToday(for: $0) < occurrenceDateToday(for: $1)
+    private func todaysScheduleItems(referenceDate: Date) -> [TodayScheduleItem] {
+        appState.scheduleEntries
+            .filter { $0.enabled }
+            .compactMap { event in
+                guard eventIsToday(event, referenceDate: referenceDate) else {
+                    return nil
+                }
+
+                return TodayScheduleItem(
+                    event: event,
+                    occurrenceDate: occurrenceDateToday(
+                        for: event,
+                        referenceDate: referenceDate
+                    )
+                )
             }
-            .first?
-            .id
+            .sorted { $0.occurrenceDate < $1.occurrenceDate }
     }
 
-    private func eventIsToday(_ event: ScheduleEntry) -> Bool {
+    private func nextUpcomingEventID(
+        now: Date,
+        items: [TodayScheduleItem]
+    ) -> UUID? {
+        items.first { $0.occurrenceDate >= now }?.id
+    }
+
+    private func eventIsToday(
+        _ event: ScheduleEntry,
+        referenceDate: Date
+    ) -> Bool {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
+        let today = calendar.startOfDay(for: referenceDate)
 
         let isExcluded = event.excludedOccurrenceDates.contains { excludedDate in
             calendar.isDate(excludedDate, inSameDayAs: today)
@@ -187,7 +200,7 @@ struct TodayScheduleView: View {
         }
 
         if event.repeatsDaily == false {
-            return calendar.isDateInToday(event.startDate)
+            return calendar.isDate(event.startDate, inSameDayAs: referenceDate)
         }
 
         let eventStartDay = calendar.startOfDay(for: event.startDate)
@@ -208,7 +221,10 @@ struct TodayScheduleView: View {
         return selectedWeekdays(for: event).contains(todayWeekday)
     }
 
-    private func occurrenceDateToday(for event: ScheduleEntry) -> Date {
+    private func occurrenceDateToday(
+        for event: ScheduleEntry,
+        referenceDate: Date
+    ) -> Date {
         let calendar = Calendar.current
 
         guard event.repeatsDaily else {
@@ -217,7 +233,7 @@ struct TodayScheduleView: View {
 
         let todayComponents = calendar.dateComponents(
             [.year, .month, .day],
-            from: Date()
+            from: referenceDate
         )
 
         let timeComponents = calendar.dateComponents(
@@ -255,6 +271,17 @@ struct TodayScheduleView: View {
     private var todayCardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+    }
+}
+
+// MARK: - Today Schedule Item
+
+private struct TodayScheduleItem: Identifiable {
+    let event: ScheduleEntry
+    let occurrenceDate: Date
+
+    var id: UUID {
+        event.id
     }
 }
 
@@ -302,9 +329,11 @@ struct ScheduleEntryRow: View {
     }
 
     private var timeText: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = appState.use24HourTime ? "HH:mm:ss" : "h:mm:ss a"
-        return formatter.string(from: occurrenceDate)
+        if appState.use24HourTime {
+            return ScheduleEntryRow.time24HourFormatter.string(from: occurrenceDate)
+        }
+
+        return ScheduleEntryRow.time12HourFormatter.string(from: occurrenceDate)
     }
 
     private var actionTypeText: String {
@@ -437,6 +466,20 @@ struct ScheduleEntryRow: View {
             )
     }
 
+    // MARK: - Date Formatting
+
+    private static let time24HourFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let time12HourFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm:ss a"
+        return formatter
+    }()
+
     // MARK: - Weekday Helpers
 
     private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
@@ -483,3 +526,4 @@ struct ScheduleEntryRow: View {
         }
     }
 }
+

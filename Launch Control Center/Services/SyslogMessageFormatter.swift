@@ -18,6 +18,13 @@ enum SyslogMessageFormatter {
     private static let local0FacilityValue = 16
     private static let appName = "Launch-Control-Center"
 
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d HH:mm:ss"
+        return formatter
+    }()
+
     static func formattedMessage(
         severity: SyslogSeverity,
         deviceName: String,
@@ -33,11 +40,7 @@ enum SyslogMessageFormatter {
     }
 
     private static func formattedTimestamp(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MMM d HH:mm:ss"
-
-        return formatter.string(from: date)
+        timestampFormatter.string(from: date)
     }
 
     private static func sanitizedHostname(_ value: String) -> String {
@@ -73,3 +76,4 @@ enum SyslogMessageFormatter {
         return cleaned.isEmpty ? "No message" : cleaned
     }
 }
+
