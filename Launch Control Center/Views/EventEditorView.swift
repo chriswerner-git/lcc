@@ -35,6 +35,10 @@ struct EventEditorView: View {
     @State private var repeatsDaily: Bool = false
     @State private var repeatWeekdays: Set<Int> = []
     @State private var repeatUntil: Date = EventEditorView.defaultRepeatUntilDate()
+    @State private var repeatMode: ScheduleRepeatMode = .oncePerSelectedDay
+    @State private var intervalMinutes: Int = 10
+    @State private var intervalEndTime: Date = EventEditorView.defaultIntervalEndTime()
+    @State private var seriesName: String = ""
 
     // MARK: - Derived State
 
@@ -56,11 +60,43 @@ struct EventEditorView: View {
     }
 
     private var canAddEvent: Bool {
-        selectedActionID != nil && repeatSelectionIsValid
+        selectedActionID != nil && repeatSelectionIsValid && intervalSelectionIsValid
     }
 
     private var repeatSelectionIsValid: Bool {
         repeatsDaily == false || repeatWeekdays.isEmpty == false
+    }
+
+    private var intervalSelectionIsValid: Bool {
+        guard repeatsDaily, repeatMode == .intervalDuringDay else {
+            return true
+        }
+
+        return intervalMinutes > 0 && intervalCrossesMidnight == false
+    }
+
+    private var intervalCrossesMidnight: Bool {
+        guard repeatsDaily, repeatMode == .intervalDuringDay else {
+            return false
+        }
+
+        guard let endTime = intervalEndDateOnSelectedDate else {
+            return true
+        }
+
+        return endTime <= composedStartDate()
+    }
+
+    private var intervalEndDateOnSelectedDate: Date? {
+        ScheduleEntryFormatter.date(
+            on: selectedDate,
+            usingTimeFrom: intervalEndTime
+        )
+    }
+
+    private var cleanedSeriesName: String? {
+        let trimmed = seriesName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - Body
@@ -79,6 +115,7 @@ struct EventEditorView: View {
                         VStack(alignment: .leading, spacing: 18) {
                             actionCard
                             scheduleCard
+                            previewCard
                         }
                         .padding(.trailing, 6)
                     }
@@ -88,7 +125,7 @@ struct EventEditorView: View {
             }
             .padding(20)
         }
-        .frame(width: 680, height: 700)
+        .frame(width: 720, height: 820)
         .onAppear {
             initializeEditor()
         }
@@ -99,6 +136,15 @@ struct EventEditorView: View {
         .onChange(of: selectedDate) { _, newDate in
             if repeatsDaily && repeatWeekdays.isEmpty {
                 repeatWeekdays = [weekday(for: newDate)]
+            }
+        }
+        .onChange(of: repeatsDaily) { _, isRepeating in
+            if isRepeating {
+                if repeatWeekdays.isEmpty {
+                    repeatWeekdays = [weekday(for: selectedDate)]
+                }
+            } else {
+                repeatMode = .oncePerSelectedDay
             }
         }
     }
@@ -242,12 +288,12 @@ struct EventEditorView: View {
     private var dateSection: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Date")
+                Text("Start Date")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 DatePicker(
-                    "Date",
+                    "Start Date",
                     selection: $selectedDate,
                     displayedComponents: [.date]
                 )
@@ -274,7 +320,7 @@ struct EventEditorView: View {
 
     private var timeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Time")
+            Text("Start Time")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -364,11 +410,6 @@ struct EventEditorView: View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle("Repeat", isOn: $repeatsDaily)
                 .toggleStyle(.switch)
-                .onChange(of: repeatsDaily) { _, isRepeating in
-                    if isRepeating && repeatWeekdays.isEmpty {
-                        repeatWeekdays = [weekday(for: selectedDate)]
-                    }
-                }
 
             if repeatsDaily {
                 repeatOptions
@@ -378,6 +419,11 @@ struct EventEditorView: View {
 
     private var repeatOptions: some View {
         VStack(alignment: .leading, spacing: 12) {
+            seriesNameField
+
+            Divider()
+                .opacity(0.45)
+
             Text("Repeat Days")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -389,11 +435,120 @@ struct EventEditorView: View {
             Divider()
                 .opacity(0.45)
 
+            repeatPatternSection
+
+            Divider()
+                .opacity(0.45)
+
             repeatUntilPicker
         }
         .padding(12)
         .background(insetPanelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var seriesNameField: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Series Name")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField("Optional — for example, Daily Loop or Six Times Per Hour", text: $seriesName)
+                .textFieldStyle(.roundedBorder)
+
+            Text("Optional. Launch Control Center uses a hidden identifier for the series, so this can be left blank.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var repeatPatternSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Time Pattern")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Time Pattern", selection: $repeatMode) {
+                Text("Once per selected day").tag(ScheduleRepeatMode.oncePerSelectedDay)
+                Text("Repeat during selected days").tag(ScheduleRepeatMode.intervalDuringDay)
+            }
+            .pickerStyle(.segmented)
+
+            if repeatMode == .intervalDuringDay {
+                intervalOptions
+            }
+        }
+    }
+
+    private var intervalOptions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Repeat Every")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextField(
+                        "Minutes",
+                        value: $intervalMinutes,
+                        format: .number.grouping(.never)
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 90)
+                    .monospacedDigit()
+                    .onChange(of: intervalMinutes) { _, newValue in
+                        intervalMinutes = clamped(newValue, to: 1...1_440)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("End Time")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    DatePicker(
+                        "End Time",
+                        selection: $intervalEndTime,
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .labelsHidden()
+                }
+
+                Spacer()
+            }
+
+            intervalPresetButtons
+
+            Text("End Time is inclusive. If the final Event lands exactly on this time, it will run at this time, then stop. Example: every 10 minutes from 1:10 PM until 8:00 PM includes 8:00 PM.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            if intervalCrossesMidnight {
+                Label(
+                    "Daily repeating Events cannot cross midnight yet. Please create a second Event series for the next day.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var intervalPresetButtons: some View {
+        HStack(spacing: 8) {
+            ForEach([5, 10, 15, 30, 60], id: \.self) { preset in
+                Button(preset == 60 ? "Hourly" : "\(preset) min") {
+                    intervalMinutes = preset
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            Spacer()
+        }
     }
 
     private var repeatQuickButtons: some View {
@@ -430,16 +585,20 @@ struct EventEditorView: View {
     private var repeatUntilPicker: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Repeat Until")
+                Text("Series End Date")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 DatePicker(
-                    "Repeat Until",
+                    "Series End Date",
                     selection: $repeatUntil,
                     displayedComponents: [.date]
                 )
                 .labelsHidden()
+
+                Text("The series may run through this date. For interval repeats, the daily End Time controls the last run within each selected day.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -491,6 +650,129 @@ struct EventEditorView: View {
         }
     }
 
+    // MARK: - Preview
+
+    private var previewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "Preview",
+                subtitle: previewSubtitle
+            )
+
+            if canAddEvent == false {
+                Text("Complete the schedule settings to preview generated Events.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(insetPanelBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(previewOccurrences, id: \.timeIntervalSince1970) { occurrenceDate in
+                        HStack(spacing: 8) {
+                            Image(systemName: repeatsDaily ? "rectangle.stack" : "calendar")
+                                .font(.caption)
+                                .foregroundStyle(repeatsDaily ? .blue : .secondary)
+
+                            Text(Self.previewFormatter.string(from: occurrenceDate))
+                                .font(.caption)
+                                .monospacedDigit()
+
+                            Spacer()
+                        }
+                    }
+
+                    if previewOccurrences.isEmpty {
+                        Text("No occurrences are generated by these settings.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(insetPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var previewSubtitle: String {
+        if repeatsDaily {
+            return "Showing up to the next 25 generated Events."
+        }
+
+        return "This Event will run once."
+    }
+
+    private var previewOccurrences: [Date] {
+        guard canAddEvent, let previewEvent = makePreviewEvent() else {
+            return []
+        }
+
+        if previewEvent.repeatsDaily == false {
+            return [previewEvent.startDate]
+        }
+
+        let calendar = Calendar.current
+        var occurrences: [Date] = []
+        var day = calendar.startOfDay(for: previewEvent.startDate)
+        let finalDay = calendar.startOfDay(for: previewEvent.repeatUntil ?? previewEvent.startDate)
+        var guardCount = 0
+
+        while day <= finalDay, occurrences.count < 25, guardCount < 370 {
+            occurrences.append(
+                contentsOf: ScheduleEntryFormatter.occurrenceDates(
+                    for: previewEvent,
+                    on: day,
+                    calendar: calendar
+                )
+            )
+
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+                break
+            }
+
+            day = nextDay
+            guardCount += 1
+        }
+
+        return occurrences
+            .filter { $0 >= previewEvent.startDate }
+            .sorted()
+            .prefix(25)
+            .map { $0 }
+    }
+
+    private func makePreviewEvent() -> ScheduleEntry? {
+        guard let selectedActionID else {
+            return nil
+        }
+
+        let startDate = composedStartDate()
+        let endDate = repeatsDaily ? Self.endOfDay(for: repeatUntil) : nil
+        let intervalEndDate = repeatMode == .intervalDuringDay ? intervalEndDateOnSelectedDate : nil
+
+        return ScheduleEntry(
+            seriesID: repeatsDaily ? UUID() : nil,
+            seriesName: cleanedSeriesName,
+            actionDefinitionID: selectedActionID,
+            startDate: startDate,
+            enabled: true,
+            repeatsDaily: repeatsDaily,
+            repeatWeekdays: repeatsDaily ? repeatWeekdays : [],
+            repeatUntil: endDate,
+            repeatMode: repeatsDaily ? repeatMode : .oncePerSelectedDay,
+            intervalMinutes: repeatsDaily && repeatMode == .intervalDuringDay ? intervalMinutes : nil,
+            intervalEndTime: intervalEndDate,
+            seriesEndDate: endDate
+        )
+    }
+
     // MARK: - Footer
 
     private var footerButtons: some View {
@@ -539,13 +821,22 @@ struct EventEditorView: View {
             return
         }
 
+        let startDate = composedStartDate()
+        let endDate = repeatsDaily ? Self.endOfDay(for: repeatUntil) : nil
+
         let event = ScheduleEntry(
+            seriesID: repeatsDaily ? UUID() : nil,
+            seriesName: repeatsDaily ? cleanedSeriesName : nil,
             actionDefinitionID: selectedActionID,
-            startDate: composedStartDate(),
+            startDate: startDate,
             enabled: true,
             repeatsDaily: repeatsDaily,
             repeatWeekdays: repeatsDaily ? repeatWeekdays : [],
-            repeatUntil: repeatsDaily ? Self.endOfDay(for: repeatUntil) : nil
+            repeatUntil: endDate,
+            repeatMode: repeatsDaily ? repeatMode : .oncePerSelectedDay,
+            intervalMinutes: repeatsDaily && repeatMode == .intervalDuringDay ? intervalMinutes : nil,
+            intervalEndTime: repeatsDaily && repeatMode == .intervalDuringDay ? intervalEndDateOnSelectedDate : nil,
+            seriesEndDate: endDate
         )
 
         appState.scheduleEntries.append(event)
@@ -624,9 +915,7 @@ struct EventEditorView: View {
     }
 
     private func dayOfWeekText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE"
-        return formatter.string(from: date)
+        Self.dayOfWeekFormatter.string(from: date)
     }
 
     private static func defaultStartDate() -> Date {
@@ -664,6 +953,17 @@ struct EventEditorView: View {
         return endOfDay(for: oneWeekFromNow)
     }
 
+    private static func defaultIntervalEndTime() -> Date {
+        let calendar = Calendar.current
+        let start = defaultStartDate()
+
+        return calendar.date(
+            byAdding: .hour,
+            value: 1,
+            to: start
+        ) ?? start
+    }
+
     private static func endOfDay(for date: Date) -> Date {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
@@ -673,6 +973,18 @@ struct EventEditorView: View {
             to: startOfDay
         ) ?? date
     }
+
+    private static let dayOfWeekFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter
+    }()
+
+    private static let previewFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, MMM d • h:mm:ss a"
+        return formatter
+    }()
 
     // MARK: - Shared UI
 
@@ -783,27 +1095,7 @@ private enum WeekdayOption: Int, CaseIterable, Identifiable {
     }
 
     var shortName: String {
-        switch self {
-        case .sunday:
-            return "Sun"
-
-        case .monday:
-            return "Mon"
-
-        case .tuesday:
-            return "Tue"
-
-        case .wednesday:
-            return "Wed"
-
-        case .thursday:
-            return "Thu"
-
-        case .friday:
-            return "Fri"
-
-        case .saturday:
-            return "Sat"
-        }
+        ScheduleEntryFormatter.shortWeekdayName(for: rawValue)
     }
 }
+

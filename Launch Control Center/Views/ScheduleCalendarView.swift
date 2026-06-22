@@ -39,6 +39,7 @@ struct ScheduleCalendarView: View {
 
     @State private var editingOccurrence: ScheduleOccurrence?
     @State private var deletingOccurrence: ScheduleOccurrence?
+    @State private var filteredSeriesID: UUID?
 
     private let timeColumnWidth: CGFloat = 62
     private let dayHeaderHeight: CGFloat = 74
@@ -112,6 +113,7 @@ struct ScheduleCalendarView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 topControls
+                seriesFilterBanner
 
                 switch selectedPresentationMode {
                 case .calendar:
@@ -293,6 +295,38 @@ struct ScheduleCalendarView: View {
 
                 Spacer()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var seriesFilterBanner: some View {
+        if let filteredSeriesID {
+            HStack(spacing: 10) {
+                Label(seriesFilterTitle(for: filteredSeriesID), systemImage: "line.3.horizontal.decrease.circle")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button {
+                    self.filteredSeriesID = nil
+                } label: {
+                    Label("Clear Series Filter", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.blue.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.blue.opacity(0.24), lineWidth: 1)
+            )
         }
     }
 
@@ -547,6 +581,9 @@ struct ScheduleCalendarView: View {
                             },
                             deleteAction: {
                                 deletingOccurrence = occurrence
+                            },
+                            showSeriesAction: {
+                                showOnlySeries(for: occurrence)
                             }
                         )
                     }
@@ -575,6 +612,9 @@ struct ScheduleCalendarView: View {
                         },
                         deleteAction: { occurrence in
                             deletingOccurrence = occurrence
+                        },
+                        showSeriesAction: { occurrence in
+                            showOnlySeries(for: occurrence)
                         }
                     )
                 }
@@ -724,21 +764,80 @@ struct ScheduleCalendarView: View {
             return
         }
 
-        let occurrenceDay = Calendar.current.startOfDay(for: occurrence.occurrenceDate)
+        if occurrence.event.repeatMode == .intervalDuringDay {
+            let occurrenceKey = ScheduleEntryFormatter.occurrenceKey(
+                eventID: occurrence.event.id,
+                occurrenceDate: occurrence.occurrenceDate
+            )
 
-        let alreadyExcluded = appState.scheduleEntries[index].excludedOccurrenceDates.contains { excludedDate in
-            Calendar.current.isDate(excludedDate, inSameDayAs: occurrenceDay)
-        }
+            if appState.scheduleEntries[index].excludedOccurrenceKeys.contains(occurrenceKey) == false {
+                appState.scheduleEntries[index].excludedOccurrenceKeys.append(occurrenceKey)
+            }
+        } else {
+            let occurrenceDay = Calendar.current.startOfDay(for: occurrence.occurrenceDate)
 
-        if alreadyExcluded == false {
-            appState.scheduleEntries[index].excludedOccurrenceDates.append(occurrenceDay)
+            let alreadyExcluded = appState.scheduleEntries[index].excludedOccurrenceDates.contains { excludedDate in
+                Calendar.current.isDate(excludedDate, inSameDayAs: occurrenceDay)
+            }
+
+            if alreadyExcluded == false {
+                appState.scheduleEntries[index].excludedOccurrenceDates.append(occurrenceDay)
+            }
         }
     }
 
     private func deleteEntireEventSeries(_ occurrence: ScheduleOccurrence) {
+        let removedSeriesID = seriesFilterIdentifier(for: occurrence.event)
+
         appState.scheduleEntries.removeAll {
             $0.id == occurrence.event.id
         }
+
+        if filteredSeriesID == removedSeriesID {
+            filteredSeriesID = nil
+        }
+    }
+
+    private func showOnlySeries(for occurrence: ScheduleOccurrence) {
+        filteredSeriesID = seriesFilterIdentifier(for: occurrence.event)
+    }
+
+    private func seriesMatchesFilter(_ event: ScheduleEntry) -> Bool {
+        guard let filteredSeriesID else {
+            return true
+        }
+
+        return seriesFilterIdentifier(for: event) == filteredSeriesID
+    }
+
+    private func seriesFilterIdentifier(for event: ScheduleEntry) -> UUID? {
+        guard event.repeatsDaily else {
+            return nil
+        }
+
+        return event.seriesID ?? event.id
+    }
+
+    private func seriesFilterTitle(for seriesID: UUID) -> String {
+        guard let event = appState.scheduleEntries.first(where: {
+            seriesFilterIdentifier(for: $0) == seriesID
+        }) else {
+            return "Filtering one recurring series"
+        }
+
+        let actionName = appState.actionDefinitions.first(where: {
+            $0.id == event.actionDefinitionID
+        })?.name ?? "Missing Action"
+
+        let trimmedSeriesName = event.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let displayName = trimmedSeriesName.isEmpty ? actionName : trimmedSeriesName
+        let summary = ScheduleEntryFormatter.repeatSummary(
+            for: event,
+            oneTimeText: "One time",
+            includeRepeatUntil: true
+        )
+
+        return "Showing series: \(displayName) — \(summary)"
     }
 
     // MARK: - Occurrence Calculation
@@ -748,6 +847,10 @@ struct ScheduleCalendarView: View {
         let nextID = nextOccurrenceID(now: now)
 
         let occurrences = appState.scheduleEntries.flatMap { event -> [ScheduleOccurrence] in
+            guard seriesMatchesFilter(event) else {
+                return []
+            }
+
             let occurrenceDates = ScheduleEntryFormatter.occurrenceDates(
                 for: event,
                 on: day
@@ -825,6 +928,10 @@ struct ScheduleCalendarView: View {
     private func nextOccurrenceID(now: Date) -> String? {
         let occurrences = visibleCalendarDays.flatMap { day in
             appState.scheduleEntries.flatMap { event -> [ScheduleOccurrence] in
+                guard seriesMatchesFilter(event) else {
+                    return []
+                }
+
                 guard event.enabled else {
                     return []
                 }
@@ -1091,6 +1198,7 @@ private struct ScheduleListDaySection: View {
     let runAction: (ScheduleOccurrence) -> Void
     let editAction: (ScheduleOccurrence) -> Void
     let deleteAction: (ScheduleOccurrence) -> Void
+    let showSeriesAction: (ScheduleOccurrence) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1142,6 +1250,9 @@ private struct ScheduleListDaySection: View {
                             },
                             deleteAction: {
                                 deleteAction(occurrence)
+                            },
+                            showSeriesAction: {
+                                showSeriesAction(occurrence)
                             }
                         )
 
@@ -1201,6 +1312,7 @@ private struct ScheduleListOccurrenceRow: View {
     let runAction: () -> Void
     let editAction: () -> Void
     let deleteAction: () -> Void
+    let showSeriesAction: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1212,7 +1324,14 @@ private struct ScheduleListOccurrenceRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(occurrence.action.name)
+                    if occurrence.event.repeatsDaily {
+                        Image(systemName: "rectangle.stack")
+                            .font(.caption)
+                            .foregroundStyle(seriesIconStyle)
+                            .help(seriesHelpText)
+                    }
+
+                    Text(primaryDisplayName)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(primaryTextStyle)
                         .lineLimit(1)
@@ -1226,6 +1345,17 @@ private struct ScheduleListOccurrenceRow: View {
                 }
 
                 HStack(spacing: 7) {
+                    if hasNamedSeries {
+                        Text("Action: \(occurrence.action.name)")
+                            .font(.caption)
+                            .foregroundStyle(secondaryTextStyle)
+                            .lineLimit(1)
+
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+
                     Text(repeatSummary)
                         .font(.caption)
                         .foregroundStyle(secondaryTextStyle)
@@ -1277,6 +1407,14 @@ private struct ScheduleListOccurrenceRow: View {
                 Label("Edit Event", systemImage: "pencil")
             }
 
+            if occurrence.event.repeatsDaily {
+                Button {
+                    showSeriesAction()
+                } label: {
+                    Label("Show Only This Series", systemImage: "line.3.horizontal.decrease.circle")
+                }
+            }
+
             Divider()
 
             Button(role: .destructive) {
@@ -1285,6 +1423,19 @@ private struct ScheduleListOccurrenceRow: View {
                 Label("Delete Event", systemImage: "trash")
             }
         }
+    }
+
+    private var cleanedSeriesName: String? {
+        let trimmed = occurrence.event.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var hasNamedSeries: Bool {
+        cleanedSeriesName != nil
+    }
+
+    private var primaryDisplayName: String {
+        cleanedSeriesName ?? occurrence.action.name
     }
 
     private var actionColor: Color {
@@ -1303,6 +1454,18 @@ private struct ScheduleListOccurrenceRow: View {
 
     private var secondaryTextStyle: AnyShapeStyle {
         occurrence.isPast ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary)
+    }
+
+    private var seriesIconStyle: AnyShapeStyle {
+        occurrence.isPast ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.blue)
+    }
+
+    private var seriesHelpText: String {
+        if let cleanedSeriesName {
+            return "Part of recurring series: \(cleanedSeriesName)"
+        }
+
+        return "Part of a recurring series"
     }
 
     private var eventStatusText: String {
@@ -1429,6 +1592,7 @@ private struct CompactScheduleEventChip: View {
     let runAction: () -> Void
     let editAction: () -> Void
     let deleteAction: () -> Void
+    let showSeriesAction: () -> Void
 
     var body: some View {
         HStack(spacing: 5) {
@@ -1438,7 +1602,14 @@ private struct CompactScheduleEventChip: View {
                 .foregroundStyle(eventTextStyle)
                 .layoutPriority(1)
 
-            Text(occurrence.action.name)
+            if occurrence.event.repeatsDaily {
+                Image(systemName: "rectangle.stack")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(eventTextStyle)
+                    .help(seriesHelpText)
+            }
+
+            Text(primaryDisplayName)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(eventTextStyle)
                 .lineLimit(1)
@@ -1486,6 +1657,14 @@ private struct CompactScheduleEventChip: View {
                 Label("Edit Event", systemImage: "pencil")
             }
 
+            if occurrence.event.repeatsDaily {
+                Button {
+                    showSeriesAction()
+                } label: {
+                    Label("Show Only This Series", systemImage: "line.3.horizontal.decrease.circle")
+                }
+            }
+
             Divider()
 
             Button(role: .destructive) {
@@ -1497,7 +1676,35 @@ private struct CompactScheduleEventChip: View {
     }
 
     private var helpText: String {
-        "\(timeText(for: occurrence.occurrenceDate)) — \(occurrence.action.name)"
+        let baseText = "\(timeText(for: occurrence.occurrenceDate)) — \(primaryDisplayName)"
+        let actionText = hasNamedSeries ? " • Action: \(occurrence.action.name)" : ""
+
+        guard occurrence.event.repeatsDaily else {
+            return "\(baseText)\(actionText)"
+        }
+
+        return "\(baseText)\(actionText) • \(seriesHelpText)"
+    }
+
+    private var cleanedSeriesName: String? {
+        let trimmed = occurrence.event.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var hasNamedSeries: Bool {
+        cleanedSeriesName != nil
+    }
+
+    private var primaryDisplayName: String {
+        cleanedSeriesName ?? occurrence.action.name
+    }
+
+    private var seriesHelpText: String {
+        if let cleanedSeriesName {
+            return "Part of recurring series: \(cleanedSeriesName)"
+        }
+
+        return "Part of a recurring series"
     }
 
     private var actionColor: Color {
@@ -1725,17 +1932,22 @@ private struct ScheduleEventEditSheet: View {
     @State private var repeatWeekdays: Set<Int>
     @State private var repeatUntil: Date
     @State private var editScope: ScheduleEditScope
+    @State private var repeatMode: ScheduleRepeatMode
+    @State private var intervalMinutes: Int
+    @State private var intervalEndTime: Date
+    @State private var seriesName: String
 
     init(occurrence: ScheduleOccurrence) {
         self.occurrence = occurrence
 
+        let initialDate = occurrence.event.repeatsDaily ? occurrence.occurrenceDate : occurrence.event.startDate
         let components = Calendar.current.dateComponents(
             [.hour, .minute, .second],
-            from: occurrence.occurrenceDate
+            from: initialDate
         )
 
         _selectedActionID = State(initialValue: occurrence.event.actionDefinitionID)
-        _selectedDate = State(initialValue: occurrence.occurrenceDate)
+        _selectedDate = State(initialValue: initialDate)
         _hour = State(initialValue: components.hour ?? 0)
         _minute = State(initialValue: components.minute ?? 0)
         _second = State(initialValue: components.second ?? 0)
@@ -1747,6 +1959,10 @@ private struct ScheduleEventEditSheet: View {
         )
         _repeatUntil = State(initialValue: occurrence.event.repeatUntil ?? occurrence.occurrenceDate)
         _editScope = State(initialValue: occurrence.event.repeatsDaily ? .thisOccurrence : .entireSeries)
+        _repeatMode = State(initialValue: occurrence.event.repeatMode)
+        _intervalMinutes = State(initialValue: occurrence.event.intervalMinutes ?? 10)
+        _intervalEndTime = State(initialValue: occurrence.event.intervalEndTime ?? Self.defaultIntervalEndTime(from: occurrence.event.startDate))
+        _seriesName = State(initialValue: occurrence.event.seriesName ?? "")
     }
 
     var body: some View {
@@ -1762,12 +1978,30 @@ private struct ScheduleEventEditSheet: View {
 
             if editScope == .entireSeries {
                 repeatSection
+            } else {
+                singleOccurrenceNote
             }
 
             footer
         }
         .padding(20)
-        .frame(width: 560, height: editScope == .entireSeries ? 620 : 460)
+        .frame(width: 620, height: editScope == .entireSeries ? 760 : 500)
+        .onChange(of: editScope) { _, newScope in
+            if newScope == .entireSeries {
+                loadDateAndTime(from: occurrence.event.startDate)
+            } else {
+                loadDateAndTime(from: occurrence.occurrenceDate)
+            }
+        }
+        .onChange(of: repeatsDaily) { _, isRepeating in
+            if isRepeating && repeatWeekdays.isEmpty {
+                repeatWeekdays = [Calendar.current.component(.weekday, from: selectedDate)]
+            }
+
+            if isRepeating == false {
+                repeatMode = .oncePerSelectedDay
+            }
+        }
     }
 
     private var header: some View {
@@ -1822,7 +2056,7 @@ private struct ScheduleEventEditSheet: View {
     private var dateTimeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             DatePicker(
-                "Date",
+                editScope == .entireSeries ? "Start Date" : "Date",
                 selection: $selectedDate,
                 displayedComponents: [.date]
             )
@@ -1854,26 +2088,123 @@ private struct ScheduleEventEditSheet: View {
             )
             .textFieldStyle(.roundedBorder)
             .frame(width: 90)
+            .monospacedDigit()
             .onChange(of: value.wrappedValue) { _, newValue in
                 value.wrappedValue = min(max(newValue, range.lowerBound), range.upperBound)
             }
         }
     }
 
+    private var singleOccurrenceNote: some View {
+        Label(
+            "Saving this occurrence only will remove the original generated occurrence and create a new one-time Event.",
+            systemImage: "rectangle.stack.badge.minus"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(10)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     private var repeatSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Toggle("Repeat", isOn: $repeatsDaily)
 
             if repeatsDaily {
+                seriesNameField
                 weekdayGrid
+                repeatPatternPicker
+
+                if repeatMode == .intervalDuringDay {
+                    intervalSection
+                }
 
                 DatePicker(
-                    "Repeat Until",
+                    "Series End Date",
                     selection: $repeatUntil,
                     displayedComponents: [.date]
                 )
             }
         }
+    }
+
+    private var seriesNameField: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Series Name")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField("Optional", text: $seriesName)
+                .textFieldStyle(.roundedBorder)
+
+            Text("Optional. The backend uses a hidden series identifier, so this can be left blank.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var repeatPatternPicker: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Time Pattern")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Time Pattern", selection: $repeatMode) {
+                Text("Once per selected day").tag(ScheduleRepeatMode.oncePerSelectedDay)
+                Text("Repeat during selected days").tag(ScheduleRepeatMode.intervalDuringDay)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var intervalSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                integerField("Repeat Every (min)", value: $intervalMinutes, range: 1...1_440)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("End Time")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    DatePicker(
+                        "End Time",
+                        selection: $intervalEndTime,
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .labelsHidden()
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                ForEach([5, 10, 15, 30, 60], id: \.self) { preset in
+                    Button(preset == 60 ? "Hourly" : "\(preset) min") {
+                        intervalMinutes = preset
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            Text("End Time is inclusive. If the final Event lands exactly on this time, it will run at this time, then stop.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            if intervalCrossesMidnight {
+                Label(
+                    "Daily repeating Events cannot cross midnight yet. Please create a second Event series for the next day.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var weekdayGrid: some View {
@@ -1916,8 +2247,48 @@ private struct ScheduleEventEditSheet: View {
                 saveChanges()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(selectedActionID == nil)
+            .disabled(canSave == false)
         }
+    }
+
+    private var canSave: Bool {
+        guard selectedActionID != nil else {
+            return false
+        }
+
+        if repeatsDaily && repeatWeekdays.isEmpty {
+            return false
+        }
+
+        if repeatsDaily && repeatMode == .intervalDuringDay {
+            return intervalMinutes > 0 && intervalCrossesMidnight == false
+        }
+
+        return true
+    }
+
+    private var intervalCrossesMidnight: Bool {
+        guard repeatsDaily, repeatMode == .intervalDuringDay else {
+            return false
+        }
+
+        guard let endTime = intervalEndDateOnSelectedDate else {
+            return true
+        }
+
+        return endTime <= composedDate()
+    }
+
+    private var intervalEndDateOnSelectedDate: Date? {
+        ScheduleEntryFormatter.date(
+            on: selectedDate,
+            usingTimeFrom: intervalEndTime
+        )
+    }
+
+    private var cleanedSeriesName: String? {
+        let trimmed = seriesName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func saveChanges() {
@@ -1956,9 +2327,19 @@ private struct ScheduleEventEditSheet: View {
         selectedActionID: UUID,
         newStartDate: Date
     ) {
-        let occurrenceDay = Calendar.current.startOfDay(for: occurrence.occurrenceDate)
+        if occurrence.event.repeatMode == .intervalDuringDay {
+            let occurrenceKey = ScheduleEntryFormatter.occurrenceKey(
+                eventID: occurrence.event.id,
+                occurrenceDate: occurrence.occurrenceDate
+            )
 
-        appState.scheduleEntries[originalIndex].excludedOccurrenceDates.append(occurrenceDay)
+            if appState.scheduleEntries[originalIndex].excludedOccurrenceKeys.contains(occurrenceKey) == false {
+                appState.scheduleEntries[originalIndex].excludedOccurrenceKeys.append(occurrenceKey)
+            }
+        } else {
+            let occurrenceDay = Calendar.current.startOfDay(for: occurrence.occurrenceDate)
+            appState.scheduleEntries[originalIndex].excludedOccurrenceDates.append(occurrenceDay)
+        }
 
         let oneTimeEvent = ScheduleEntry(
             actionDefinitionID: selectedActionID,
@@ -1980,6 +2361,24 @@ private struct ScheduleEventEditSheet: View {
         appState.scheduleEntries[index].repeatsDaily = repeatsDaily
         appState.scheduleEntries[index].repeatWeekdays = repeatsDaily ? repeatWeekdays : []
         appState.scheduleEntries[index].repeatUntil = repeatsDaily ? endOfDay(for: repeatUntil) : nil
+
+        if repeatsDaily {
+            appState.scheduleEntries[index].seriesID = occurrence.event.seriesID ?? UUID()
+            appState.scheduleEntries[index].seriesName = cleanedSeriesName
+            appState.scheduleEntries[index].repeatMode = repeatMode
+            appState.scheduleEntries[index].intervalMinutes = repeatMode == .intervalDuringDay ? intervalMinutes : nil
+            appState.scheduleEntries[index].intervalEndTime = repeatMode == .intervalDuringDay ? intervalEndDateOnSelectedDate : nil
+            appState.scheduleEntries[index].seriesEndDate = endOfDay(for: repeatUntil)
+        } else {
+            appState.scheduleEntries[index].seriesID = nil
+            appState.scheduleEntries[index].seriesName = nil
+            appState.scheduleEntries[index].repeatMode = .oncePerSelectedDay
+            appState.scheduleEntries[index].intervalMinutes = nil
+            appState.scheduleEntries[index].intervalEndTime = nil
+            appState.scheduleEntries[index].seriesEndDate = nil
+            appState.scheduleEntries[index].excludedOccurrenceDates.removeAll()
+            appState.scheduleEntries[index].excludedOccurrenceKeys.removeAll()
+        }
     }
 
     private func composedDate() -> Date {
@@ -2000,6 +2399,19 @@ private struct ScheduleEventEditSheet: View {
         return calendar.date(from: components) ?? selectedDate
     }
 
+    private func loadDateAndTime(from date: Date) {
+        selectedDate = date
+
+        let components = Calendar.current.dateComponents(
+            [.hour, .minute, .second],
+            from: date
+        )
+
+        hour = components.hour ?? 0
+        minute = components.minute ?? 0
+        second = components.second ?? 0
+    }
+
     private func endOfDay(for date: Date) -> Date {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
@@ -2008,6 +2420,14 @@ private struct ScheduleEventEditSheet: View {
             byAdding: DateComponents(day: 1, second: -1),
             to: startOfDay
         ) ?? date
+    }
+
+    private static func defaultIntervalEndTime(from startDate: Date) -> Date {
+        Calendar.current.date(
+            byAdding: .hour,
+            value: 1,
+            to: startDate
+        ) ?? startDate
     }
 }
 
