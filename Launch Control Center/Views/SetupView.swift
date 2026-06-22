@@ -749,7 +749,9 @@ struct SetupView: View {
 
         do {
             try appState.exportConfiguration(to: finalURL)
-            configurationStatus = "Exported configuration to \(finalURL.lastPathComponent)."
+
+            let summary = appState.currentConfigurationAuditSummary()
+            configurationStatus = "Exported \(finalURL.lastPathComponent). \(summaryLine(for: summary))"
         } catch {
             configurationStatus = "Export failed: \(error.localizedDescription)"
         }
@@ -773,14 +775,16 @@ struct SetupView: View {
             return
         }
 
-        guard confirmImportReplacement(fileName: url.lastPathComponent) else {
-            configurationStatus = "Import cancelled."
-            return
-        }
-
         do {
+            let preview = try appState.previewConfigurationImport(from: url)
+
+            guard confirmImportReplacement(preview: preview) else {
+                configurationStatus = "Import cancelled."
+                return
+            }
+
             try appState.importConfiguration(from: url)
-            configurationStatus = "Imported configuration from \(url.lastPathComponent)."
+            configurationStatus = "Imported \(url.lastPathComponent). \(summaryLine(for: preview.summary))"
         } catch {
             configurationStatus = "Import failed: \(error.localizedDescription)"
         }
@@ -818,17 +822,79 @@ struct SetupView: View {
         return url.deletingPathExtension().appendingPathExtension("launchcontrol")
     }
 
-    private func confirmImportReplacement(fileName: String) -> Bool {
+    private func confirmImportReplacement(preview: ConfigurationImportPreview) -> Bool {
         let alert = NSAlert()
         alert.messageText = "Replace Current Configuration?"
-        alert.informativeText = "Importing \(fileName) will replace the current settings, Actions, and scheduled Events."
-        alert.alertStyle = .warning
+        alert.informativeText = importConfirmationText(for: preview)
+        alert.alertStyle = preview.summary.hasErrors ? .critical : .warning
         alert.addButton(withTitle: "Import and Replace")
         alert.addButton(withTitle: "Cancel")
 
         let response = alert.runModal()
         return response == .alertFirstButtonReturn
     }
+
+    private func importConfirmationText(for preview: ConfigurationImportPreview) -> String {
+        var lines: [String] = []
+
+        lines.append("Importing \(preview.fileName) will replace the current settings, Actions, and scheduled Events.")
+        lines.append("")
+        lines.append("Imported Configuration")
+        lines.append(configurationSummaryText(for: preview.summary))
+
+        if preview.summary.issues.isEmpty == false {
+            lines.append("")
+            lines.append("Schedule Check")
+
+            for issue in preview.summary.issues.prefix(8) {
+                let prefix = issue.severity == .error ? "Error" : "Warning"
+                lines.append("• \(prefix): \(issue.message)")
+            }
+
+            if preview.summary.issues.count > 8 {
+                lines.append("• …and \(preview.summary.issues.count - 8) more issue(s).")
+            }
+        }
+
+        lines.append("")
+        lines.append("This cannot be undone from within Launch Control Center. Export the current configuration first if you may need to return to it.")
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func configurationSummaryText(for summary: ConfigurationAuditSummary) -> String {
+        var lines: [String] = []
+
+        lines.append("Project: \(summary.projectName)")
+        lines.append("Version: \(summary.version)")
+        lines.append("Exported: \(Self.configurationDateFormatter.string(from: summary.exportedAt))")
+        lines.append("Actions: \(summary.actionCount)")
+        lines.append("Events: \(summary.eventCount) total — \(summary.standaloneEventCount) standalone, \(summary.recurringSeriesCount) recurring series")
+        lines.append("Interval Series: \(summary.intervalSeriesCount)")
+        lines.append("Disabled Events: \(summary.disabledEventCount)")
+        lines.append("Removed Occurrences: \(summary.removedOccurrenceCount)")
+
+        if summary.openEndedSeriesCount > 0 {
+            lines.append("Generated Events: \(summary.finiteGeneratedEventCount) finite, plus \(summary.openEndedSeriesCount) open-ended series")
+        } else {
+            lines.append("Generated Events: \(summary.finiteGeneratedEventCount)")
+        }
+
+        lines.append("Validation: \(summary.statusText)")
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func summaryLine(for summary: ConfigurationAuditSummary) -> String {
+        "Actions: \(summary.actionCount). Events: \(summary.eventCount). Recurring Series: \(summary.recurringSeriesCount). Validation: \(summary.statusText)."
+    }
+
+    private static let configurationDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
     private func sanitizedFileName(_ value: String) -> String {
         let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:")
@@ -971,4 +1037,5 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
         }
     }
 }
+
 

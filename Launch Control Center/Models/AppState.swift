@@ -115,6 +115,74 @@ struct ScheduleExecutionRecord: Identifiable, Codable {
     }
 }
 
+
+// MARK: - Configuration Audit
+
+enum ConfigurationAuditSeverity {
+    case warning
+    case error
+
+    var displayName: String {
+        switch self {
+        case .warning:
+            return "Warning"
+
+        case .error:
+            return "Error"
+        }
+    }
+}
+
+struct ConfigurationAuditIssue: Identifiable {
+    var id: UUID = UUID()
+    var severity: ConfigurationAuditSeverity
+    var message: String
+}
+
+struct ConfigurationAuditSummary {
+    var projectName: String
+    var version: Int
+    var exportedAt: Date
+
+    var actionCount: Int
+    var eventCount: Int
+    var standaloneEventCount: Int
+    var recurringSeriesCount: Int
+    var intervalSeriesCount: Int
+    var disabledEventCount: Int
+    var removedOccurrenceCount: Int
+
+    var finiteGeneratedEventCount: Int
+    var openEndedSeriesCount: Int
+
+    var issues: [ConfigurationAuditIssue]
+
+    var hasErrors: Bool {
+        issues.contains { $0.severity == .error }
+    }
+
+    var hasWarnings: Bool {
+        issues.contains { $0.severity == .warning }
+    }
+
+    var statusText: String {
+        if hasErrors {
+            return "Errors"
+        }
+
+        if hasWarnings {
+            return "Warnings"
+        }
+
+        return "OK"
+    }
+}
+
+struct ConfigurationImportPreview {
+    var fileName: String
+    var summary: ConfigurationAuditSummary
+}
+
 final class AppState: ObservableObject {
     let udpService = UDPService()
 
@@ -757,17 +825,314 @@ final class AppState: ObservableObject {
     }
 
     func importConfiguration(from url: URL) throws {
+        let configuration = try decodeConfiguration(from: url)
+        applyConfiguration(configuration)
+    }
+
+    func previewConfigurationImport(from url: URL) throws -> ConfigurationImportPreview {
+        let configuration = try decodeConfiguration(from: url)
+
+        return ConfigurationImportPreview(
+            fileName: url.lastPathComponent,
+            summary: auditSummary(for: configuration)
+        )
+    }
+
+    func currentConfigurationAuditSummary() -> ConfigurationAuditSummary {
+        let configuration = LaunchControlConfiguration(
+            version: 1,
+            exportedAt: Date(),
+            projectName: projectName,
+            projectNotes: projectNotes,
+            use24HourTime: use24HourTime,
+            weekStartDay: weekStartDay,
+            incomingUDPPort: incomingUDPPort,
+            defaultDestinationHost: defaultDestinationHost,
+            defaultDestinationPort: defaultDestinationPort,
+            volumeDestinationHost: volumeDestinationHost,
+            volumeDestinationPort: volumeDestinationPort,
+            volumeMessagePrefix: volumeMessagePrefix,
+            volumeOutputMinimum: volumeOutputMinimum,
+            volumeOutputMaximum: volumeOutputMaximum,
+            showActionsEnabled: showActionsEnabled,
+            utilityActionsEnabled: utilityActionsEnabled,
+            scheduleEnabledOnMessage: scheduleEnabledOnMessage,
+            scheduleEnabledOffMessage: scheduleEnabledOffMessage,
+            volumeLevel: volumeLevel,
+            lastUnmutedVolumeLevel: lastUnmutedVolumeLevel,
+            isMuted: isMuted,
+            lowVolumeLevel: lowVolumeLevel,
+            normalVolumeLevel: normalVolumeLevel,
+            highVolumeLevel: highVolumeLevel,
+            actionDefinitions: actionDefinitions,
+            scheduledEvents: scheduledEvents,
+            scheduleEntries: scheduleEntries
+        )
+
+        return auditSummary(for: configuration)
+    }
+
+    private func decodeConfiguration(from url: URL) throws -> LaunchControlConfiguration {
         let data = try Data(contentsOf: url)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let configuration = try decoder.decode(
+        return try decoder.decode(
             LaunchControlConfiguration.self,
             from: data
         )
+    }
 
-        applyConfiguration(configuration)
+    private func auditSummary(for configuration: LaunchControlConfiguration) -> ConfigurationAuditSummary {
+        let actions = configuration.actionDefinitions
+        let entries = configuration.scheduleEntries
+        let actionIDs = Set(actions.map { $0.id })
+
+        let standaloneEntries = entries.filter { $0.repeatsDaily == false }
+        let recurringEntries = entries.filter { $0.repeatsDaily }
+        let intervalEntries = recurringEntries.filter { $0.repeatMode == .intervalDuringDay }
+        let disabledEntries = entries.filter { $0.enabled == false }
+
+        var finiteGeneratedEventCount = 0
+        var openEndedSeriesCount = 0
+        var issues: [ConfigurationAuditIssue] = []
+
+        if actions.isEmpty {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .warning,
+                    message: "Configuration contains no Actions."
+                )
+            )
+        }
+
+        if entries.isEmpty {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .warning,
+                    message: "Configuration contains no scheduled Events."
+                )
+            )
+        }
+
+        let missingActionCount = entries.filter { actionIDs.contains($0.actionDefinitionID) == false }.count
+        if missingActionCount > 0 {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .error,
+                    message: "\(missingActionCount) scheduled Event\(missingActionCount == 1 ? "" : "s") reference missing Actions."
+                )
+            )
+        }
+
+        for entry in entries {
+            let entryName = configurationActionName(
+                for: entry,
+                actions: actions
+            )
+
+            if entry.repeatsDaily {
+                if ScheduleEntryFormatter.selectedWeekdays(for: entry).isEmpty {
+                    issues.append(
+                        ConfigurationAuditIssue(
+                            severity: .error,
+                            message: "Recurring Event ‘\(entryName)’ has no repeat days selected."
+                        )
+                    )
+                }
+
+                if let repeatUntil = entry.repeatUntil {
+                    let startDay = Calendar.current.startOfDay(for: entry.startDate)
+                    let endDay = Calendar.current.startOfDay(for: repeatUntil)
+
+                    if endDay < startDay {
+                        issues.append(
+                            ConfigurationAuditIssue(
+                                severity: .error,
+                                message: "Recurring Event ‘\(entryName)’ has an end date before its start date."
+                            )
+                        )
+                    } else {
+                        finiteGeneratedEventCount += generatedEventCount(
+                            for: entry,
+                            through: endDay
+                        )
+                    }
+                } else {
+                    openEndedSeriesCount += 1
+                }
+            } else {
+                finiteGeneratedEventCount += 1
+            }
+
+            if entry.repeatMode == .intervalDuringDay {
+                validateIntervalEntry(
+                    entry,
+                    entryName: entryName,
+                    issues: &issues
+                )
+            }
+        }
+
+        if finiteGeneratedEventCount > 1_000 {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .warning,
+                    message: "Finite schedules generate \(finiteGeneratedEventCount) Events. Review high-volume series before live use."
+                )
+            )
+        }
+
+        if openEndedSeriesCount > 0 {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .warning,
+                    message: "\(openEndedSeriesCount) recurring series have no end date and will continue indefinitely."
+                )
+            )
+        }
+
+        let removedOccurrenceCount = entries.reduce(0) { partialResult, entry in
+            partialResult
+            + entry.excludedOccurrenceKeys.count
+            + entry.excludedOccurrenceDates.count
+        }
+
+        return ConfigurationAuditSummary(
+            projectName: configuration.projectName,
+            version: configuration.version,
+            exportedAt: configuration.exportedAt,
+            actionCount: actions.count,
+            eventCount: entries.count,
+            standaloneEventCount: standaloneEntries.count,
+            recurringSeriesCount: recurringEntries.count,
+            intervalSeriesCount: intervalEntries.count,
+            disabledEventCount: disabledEntries.count,
+            removedOccurrenceCount: removedOccurrenceCount,
+            finiteGeneratedEventCount: finiteGeneratedEventCount,
+            openEndedSeriesCount: openEndedSeriesCount,
+            issues: issues
+        )
+    }
+
+    private func validateIntervalEntry(
+        _ entry: ScheduleEntry,
+        entryName: String,
+        issues: inout [ConfigurationAuditIssue]
+    ) {
+        guard entry.repeatsDaily else {
+            return
+        }
+
+        guard let intervalMinutes = entry.intervalMinutes, intervalMinutes > 0 else {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .error,
+                    message: "Interval series ‘\(entryName)’ has an invalid repeat interval."
+                )
+            )
+            return
+        }
+
+        if intervalMinutes < 5 {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .warning,
+                    message: "Interval series ‘\(entryName)’ repeats more often than every 5 minutes."
+                )
+            )
+        }
+
+        guard let intervalEndTime = entry.intervalEndTime else {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .error,
+                    message: "Interval series ‘\(entryName)’ is missing an end time."
+                )
+            )
+            return
+        }
+
+        let calendar = Calendar.current
+        let startSeconds = secondsSinceStartOfDay(
+            for: entry.startDate,
+            calendar: calendar
+        )
+        let endSeconds = secondsSinceStartOfDay(
+            for: intervalEndTime,
+            calendar: calendar
+        )
+
+        if endSeconds <= startSeconds {
+            issues.append(
+                ConfigurationAuditIssue(
+                    severity: .error,
+                    message: "Interval series ‘\(entryName)’ crosses midnight. Split it into separate same-day series."
+                )
+            )
+        }
+    }
+
+    private func generatedEventCount(
+        for entry: ScheduleEntry,
+        through endDay: Date
+    ) -> Int {
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: entry.startDate)
+
+        guard endDay >= startDay else {
+            return 0
+        }
+
+        var count = 0
+        var day = startDay
+
+        while day <= endDay {
+            count += ScheduleEntryFormatter.occurrenceDates(
+                for: entry,
+                on: day,
+                calendar: calendar
+            ).count
+
+            guard let nextDay = calendar.date(
+                byAdding: .day,
+                value: 1,
+                to: day
+            ) else {
+                break
+            }
+
+            day = nextDay
+        }
+
+        return count
+    }
+
+    private func configurationActionName(
+        for entry: ScheduleEntry,
+        actions: [ActionDefinition]
+    ) -> String {
+        if let seriesName = entry.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           seriesName.isEmpty == false {
+            return seriesName
+        }
+
+        return actions.first { $0.id == entry.actionDefinitionID }?.name ?? "Missing Action"
+    }
+
+    private func secondsSinceStartOfDay(
+        for date: Date,
+        calendar: Calendar
+    ) -> Int {
+        let components = calendar.dateComponents(
+            [.hour, .minute, .second],
+            from: date
+        )
+
+        return (components.hour ?? 0) * 3600
+            + (components.minute ?? 0) * 60
+            + (components.second ?? 0)
     }
 
     private func applyConfiguration(_ configuration: LaunchControlConfiguration) {
