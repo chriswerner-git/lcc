@@ -1652,11 +1652,7 @@ final class AppState: ObservableObject {
     }
 
     private func selectedWeekdaysForScheduling(_ event: ScheduleEntry) -> Set<Int> {
-        if event.repeatWeekdays.isEmpty {
-            return Set(1...7)
-        }
-
-        return event.repeatWeekdays
+        ScheduleEntryFormatter.selectedWeekdays(for: event)
     }
 
     private func eventIsNotExcluded(

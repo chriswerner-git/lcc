@@ -253,11 +253,7 @@ struct TodayScheduleView: View {
     }
 
     private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
-        if event.repeatWeekdays.isEmpty {
-            return Set(1...7)
-        }
-
-        return event.repeatWeekdays
+        ScheduleEntryFormatter.selectedWeekdays(for: event)
     }
 
     // MARK: - Styling
@@ -341,25 +337,7 @@ struct ScheduleEntryRow: View {
     }
 
     private var repeatText: String {
-        guard event.repeatsDaily else {
-            return "One-time"
-        }
-
-        let weekdays = selectedWeekdays(for: event)
-
-        if weekdays == Set(1...7) {
-            return "Every day"
-        }
-
-        if weekdays == Set([2, 3, 4, 5, 6]) {
-            return "Weekdays"
-        }
-
-        if weekdays == Set([1, 7]) {
-            return "Weekends"
-        }
-
-        return weekdayNames(for: weekdays).joined(separator: ", ")
+        ScheduleEntryFormatter.repeatSummary(for: event)
     }
 
     // MARK: - Body
@@ -483,47 +461,8 @@ struct ScheduleEntryRow: View {
     // MARK: - Weekday Helpers
 
     private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
-        if event.repeatWeekdays.isEmpty {
-            return Set(1...7)
-        }
-
-        return event.repeatWeekdays
+        ScheduleEntryFormatter.selectedWeekdays(for: event)
     }
 
-    private func weekdayNames(for weekdays: Set<Int>) -> [String] {
-        let orderedWeekdays = [1, 2, 3, 4, 5, 6, 7]
-
-        return orderedWeekdays
-            .filter { weekdays.contains($0) }
-            .map { weekdayShortName($0) }
-    }
-
-    private func weekdayShortName(_ weekday: Int) -> String {
-        switch weekday {
-        case 1:
-            return "Sun"
-
-        case 2:
-            return "Mon"
-
-        case 3:
-            return "Tue"
-
-        case 4:
-            return "Wed"
-
-        case 5:
-            return "Thu"
-
-        case 6:
-            return "Fri"
-
-        case 7:
-            return "Sat"
-
-        default:
-            return "?"
-        }
-    }
 }
 

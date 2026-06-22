@@ -443,7 +443,7 @@ struct EventSummaryView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
 
-                    Text(repeatSummary(for: next.event))
+                    Text(ScheduleEntryFormatter.repeatSummary(for: next.event))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -485,74 +485,7 @@ struct EventSummaryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    // MARK: - Event Text Formatting
-
-    private func repeatSummary(for event: ScheduleEntry) -> String {
-        guard event.repeatsDaily else {
-            return "One-time"
-        }
-
-        let weekdays = selectedWeekdays(for: event)
-
-        if weekdays == Set(1...7) {
-            return "Every day"
-        }
-
-        if weekdays == Set([2, 3, 4, 5, 6]) {
-            return "Weekdays"
-        }
-
-        if weekdays == Set([1, 7]) {
-            return "Weekends"
-        }
-
-        let names = weekdayNames(for: weekdays)
-        return names.joined(separator: ", ")
-    }
-
-    private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
-        if event.repeatWeekdays.isEmpty {
-            return Set(1...7)
-        }
-
-        return event.repeatWeekdays
-    }
-
-    private func weekdayNames(for weekdays: Set<Int>) -> [String] {
-        let orderedWeekdays = [1, 2, 3, 4, 5, 6, 7]
-
-        return orderedWeekdays
-            .filter { weekdays.contains($0) }
-            .map { weekdayShortName($0) }
-    }
-
-    private func weekdayShortName(_ weekday: Int) -> String {
-        switch weekday {
-        case 1:
-            return "Sun"
-
-        case 2:
-            return "Mon"
-
-        case 3:
-            return "Tue"
-
-        case 4:
-            return "Wed"
-
-        case 5:
-            return "Thu"
-
-        case 6:
-            return "Fri"
-
-        case 7:
-            return "Sat"
-
-        default:
-            return "?"
-        }
-    }
+    // MARK: - Date Formatting
 
     private static let dateTime24HourFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -862,11 +795,7 @@ private enum DashboardScheduleOccurrenceResolver {
     }
 
     private static func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
-        if event.repeatWeekdays.isEmpty {
-            return Set(1...7)
-        }
-
-        return event.repeatWeekdays
+        ScheduleEntryFormatter.selectedWeekdays(for: event)
     }
 
     private static func candidateWeekdayOffsets(

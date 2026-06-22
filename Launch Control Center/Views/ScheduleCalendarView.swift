@@ -613,6 +613,8 @@ struct ScheduleCalendarView: View {
                             calendarDay: calendarDay,
                             showCount: showEventCount(on: calendarDay.date),
                             utilityCount: utilityEventCount(on: calendarDay.date),
+                            showHasDisabledOrOffEvent: showHasDisabledOrOffEvent(on: calendarDay.date),
+                            utilityHasDisabledOrOffEvent: utilityHasDisabledOrOffEvent(on: calendarDay.date),
                             showActionsEnabled: appState.showActionsEnabled,
                             utilityActionsEnabled: appState.utilityActionsEnabled,
                             isCurrentMonth: Calendar.current.isDate(
@@ -637,7 +639,7 @@ struct ScheduleCalendarView: View {
     private var monthWeekdayHeader: some View {
         HStack(spacing: 0) {
             ForEach(orderedWeekdayNumbers, id: \.self) { weekday in
-                Text(shortWeekdayName(for: weekday))
+                Text(ScheduleEntryFormatter.shortWeekdayName(for: weekday))
                     .font(.caption)
                     .bold()
                     .foregroundStyle(.secondary)
@@ -649,7 +651,6 @@ struct ScheduleCalendarView: View {
     }
 
     private var monthCalendarDays: [MonthCalendarDay] {
-        let calendar = Calendar.current
         let monthStart = startOfMonth(for: visibleMonthDate)
         let firstVisibleDay = Self.startOfWeek(
             containing: monthStart,
@@ -809,6 +810,18 @@ struct ScheduleCalendarView: View {
         .count
     }
 
+    private func showHasDisabledOrOffEvent(on day: Date) -> Bool {
+        eventOccurrences(on: day).contains { occurrence in
+            occurrence.action.type == .show && occurrence.isEffectivelyScheduled == false
+        }
+    }
+
+    private func utilityHasDisabledOrOffEvent(on day: Date) -> Bool {
+        eventOccurrences(on: day).contains { occurrence in
+            occurrence.action.type == .utility && occurrence.isEffectivelyScheduled == false
+        }
+    }
+
     private func nextOccurrenceID(now: Date) -> String? {
         let occurrences = visibleCalendarDays.flatMap { day in
             appState.scheduleEntries.compactMap { event -> ScheduleOccurrence? in
@@ -897,7 +910,7 @@ struct ScheduleCalendarView: View {
     }
 
     private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
-        event.repeatWeekdays.isEmpty ? Set(1...7) : event.repeatWeekdays
+        ScheduleEntryFormatter.selectedWeekdays(for: event)
     }
 
     private func scheduleCategoryIsEnabled(for action: ActionDefinition) -> Bool {
@@ -1015,19 +1028,6 @@ struct ScheduleCalendarView: View {
         let suffix = hour < 12 ? "AM" : "PM"
 
         return "\(displayHour) \(suffix)"
-    }
-
-    private func shortWeekdayName(for weekday: Int) -> String {
-        switch weekday {
-        case 1: return "Sun"
-        case 2: return "Mon"
-        case 3: return "Tue"
-        case 4: return "Wed"
-        case 5: return "Thu"
-        case 6: return "Fri"
-        case 7: return "Sat"
-        default: return "?"
-        }
     }
 
     private func days(
@@ -1442,34 +1442,11 @@ private struct ScheduleListOccurrenceRow: View {
     }
 
     private var repeatSummary: String {
-        guard occurrence.event.repeatsDaily else {
-            return "One time"
-        }
-
-        let selectedWeekdays = occurrence.event.repeatWeekdays.isEmpty
-            ? Set(1...7)
-            : occurrence.event.repeatWeekdays
-
-        let baseText: String
-
-        if selectedWeekdays == Set(1...7) {
-            baseText = "Every day"
-        } else if selectedWeekdays == Set([2, 3, 4, 5, 6]) {
-            baseText = "Weekdays"
-        } else if selectedWeekdays == Set([1, 7]) {
-            baseText = "Weekends"
-        } else {
-            baseText = selectedWeekdays
-                .sorted()
-                .map { shortWeekdayName(for: $0) }
-                .joined(separator: ", ")
-        }
-
-        if let repeatUntil = occurrence.event.repeatUntil {
-            return "\(baseText), until \(Self.shortDateFormatter.string(from: repeatUntil))"
-        }
-
-        return baseText
+        ScheduleEntryFormatter.repeatSummary(
+            for: occurrence.event,
+            oneTimeText: "One time",
+            includeRepeatUntil: true
+        )
     }
 
     private func statusPill(
@@ -1491,19 +1468,6 @@ private struct ScheduleListOccurrenceRow: View {
     private func timeText(for date: Date) -> String {
         let formatter = use24HourTime ? Self.time24Formatter : Self.time12Formatter
         return formatter.string(from: date)
-    }
-
-    private func shortWeekdayName(for weekday: Int) -> String {
-        switch weekday {
-        case 1: return "Sun"
-        case 2: return "Mon"
-        case 3: return "Tue"
-        case 4: return "Wed"
-        case 5: return "Thu"
-        case 6: return "Fri"
-        case 7: return "Sat"
-        default: return "?"
-        }
     }
 
     private static let time24Formatter: DateFormatter = {
@@ -1539,12 +1503,12 @@ private struct CompactScheduleEventChip: View {
             Text(timeText(for: occurrence.occurrenceDate))
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .monospacedDigit()
-                .foregroundStyle(occurrence.isPast ? .secondary : .primary)
+                .foregroundStyle(eventTextStyle)
                 .layoutPriority(1)
 
             Text(occurrence.action.name)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(occurrence.isPast ? .secondary : .primary)
+                .foregroundStyle(eventTextStyle)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(2)
@@ -1614,6 +1578,22 @@ private struct CompactScheduleEventChip: View {
         }
     }
 
+    private var calendarDisplayColor: Color {
+        occurrence.isEffectivelyScheduled ? actionColor : .orange
+    }
+
+    private var eventTextStyle: AnyShapeStyle {
+        if occurrence.isPast {
+            return AnyShapeStyle(.secondary)
+        }
+
+        if occurrence.isEffectivelyScheduled == false {
+            return AnyShapeStyle(Color.orange)
+        }
+
+        return AnyShapeStyle(.primary)
+    }
+
     private var compactExecutionTitle: String {
         guard let executionRecord = occurrence.executionRecord else {
             return "No Rec"
@@ -1650,13 +1630,13 @@ private struct CompactScheduleEventChip: View {
 
     private var chipBackground: some View {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(actionColor.opacity(occurrence.isEffectivelyScheduled ? (occurrence.isPast ? 0.08 : 0.18) : 0.06))
+            .fill(calendarDisplayColor.opacity(occurrence.isEffectivelyScheduled ? (occurrence.isPast ? 0.08 : 0.18) : 0.10))
     }
 
     private var chipBorder: some View {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
             .strokeBorder(
-                occurrence.isNext ? Color.blue.opacity(0.72) : actionColor.opacity(0.30),
+                occurrence.isNext ? Color.blue.opacity(0.72) : calendarDisplayColor.opacity(0.30),
                 lineWidth: occurrence.isNext ? 1.5 : 1
             )
     }
@@ -1701,6 +1681,8 @@ private struct MonthDayCell: View {
     let calendarDay: MonthCalendarDay
     let showCount: Int
     let utilityCount: Int
+    let showHasDisabledOrOffEvent: Bool
+    let utilityHasDisabledOrOffEvent: Bool
     let showActionsEnabled: Bool
     let utilityActionsEnabled: Bool
     let isCurrentMonth: Bool
@@ -1734,7 +1716,7 @@ private struct MonthDayCell: View {
                     count: showCount,
                     singular: "Show Event",
                     plural: "Show Events",
-                    color: showActionsEnabled ? .blue : .orange
+                    color: showCountColor
                 )
             }
 
@@ -1743,7 +1725,7 @@ private struct MonthDayCell: View {
                     count: utilityCount,
                     singular: "Utility Event",
                     plural: "Utility Events",
-                    color: utilityActionsEnabled ? .purple : .orange
+                    color: utilityCountColor
                 )
             }
 
@@ -1759,6 +1741,14 @@ private struct MonthDayCell: View {
 
     private var dayNumberText: String {
         Self.dayNumberFormatter.string(from: calendarDay.date)
+    }
+
+    private var showCountColor: Color {
+        showHasDisabledOrOffEvent || showActionsEnabled == false ? .orange : .blue
+    }
+
+    private var utilityCountColor: Color {
+        utilityHasDisabledOrOffEvent || utilityActionsEnabled == false ? .orange : .purple
     }
 
     private func countPill(
