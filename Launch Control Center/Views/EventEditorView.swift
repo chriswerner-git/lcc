@@ -105,32 +105,43 @@ struct EventEditorView: View {
         ZStack {
             background
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
                 header
 
                 if appState.actionDefinitions.isEmpty {
                     emptyActionsCard
                 } else {
-                    ScrollView(.vertical) {
-                        VStack(alignment: .leading, spacing: 18) {
-                            actionCard
-                            scheduleCard
-
-                            if validationIssues.isEmpty == false {
-                                validationCard
+                    HStack(alignment: .top, spacing: 12) {
+                        ScrollView(.vertical) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                actionCard
+                                whenCard
+                                repeatCard
                             }
-
-                            previewCard
+                            .padding(.trailing, 4)
                         }
-                        .padding(.trailing, 6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                        ScrollView(.vertical) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if validationIssues.isEmpty == false {
+                                    validationCard
+                                }
+
+                                previewCard
+                            }
+                            .padding(.trailing, 4)
+                        }
+                        .frame(width: 340)
+                        .frame(maxHeight: .infinity)
                     }
 
                     footerButtons
                 }
             }
-            .padding(20)
+            .padding(16)
         }
-        .frame(width: 720, height: 820)
+        .frame(width: 1040, height: 820)
         .onAppear {
             initializeEditor()
         }
@@ -175,16 +186,16 @@ struct EventEditorView: View {
             ZStack {
                 Circle()
                     .fill(Color.blue.opacity(0.18))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 34, height: 34)
 
                 Image(systemName: "calendar.badge.plus")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.blue)
             }
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Add Event")
-                    .font(.largeTitle)
+                    .font(.title)
                     .bold()
 
                 Text("Schedule an Action to run automatically.")
@@ -199,7 +210,7 @@ struct EventEditorView: View {
     // MARK: - Action Card
 
     private var actionCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 9) {
             sectionHeader(
                 title: "Action",
                 subtitle: "Choose what this Event will run."
@@ -224,10 +235,10 @@ struct EventEditorView: View {
                 selectedActionSummary(for: selectedAction)
             }
         }
-        .padding(14)
+        .padding(10)
         .background(cardBackground)
         .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func selectedActionSummary(for action: ActionDefinition) -> some View {
@@ -241,9 +252,9 @@ struct EventEditorView: View {
 
             Spacer()
         }
-        .padding(10)
+        .padding(8)
         .background(insetPanelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func actionSummary(for action: ActionDefinition) -> String {
@@ -269,67 +280,103 @@ struct EventEditorView: View {
             )
     }
 
-    // MARK: - Schedule Card
+    // MARK: - When Card
 
-    private var scheduleCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    private var whenCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
-                title: "Schedule",
-                subtitle: appState.use24HourTime ? "Using 24-hour time." : "Using 12-hour time."
+                title: "When",
+                subtitle: repeatsDaily ? "Set the start boundary and the end boundary for this recurring Event." : (appState.use24HourTime ? "Set the date and 24-hour start time." : "Set the date and 12-hour start time.")
             )
 
-            dateSection
-            timeSection
-            repeatSection
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 10) {
+                    dateSection
+                        .frame(maxWidth: .infinity)
+
+                    timeSection
+                        .frame(maxWidth: .infinity)
+                }
+
+                if shouldShowRepeatEndControls {
+                    Divider()
+                        .opacity(0.35)
+
+                    endDateTimeSection
+                }
+            }
         }
-        .padding(14)
+        .padding(10)
         .background(cardBackground)
         .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var shouldShowRepeatEndControls: Bool {
+        repeatsDaily
+    }
+
+    private var shouldShowIntervalEndControls: Bool {
+        repeatsDaily && repeatMode == .intervalDuringDay
     }
 
     // MARK: - Date Section
 
     private var dateSection: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Start Date")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Start Date")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                DatePicker(
-                    "Start Date",
-                    selection: $selectedDate,
-                    displayedComponents: [.date]
+            HStack(alignment: .top, spacing: 8) {
+                dateNumberField(
+                    label: "Month",
+                    value: dateComponentBinding($selectedDate, .month),
+                    width: 62
                 )
-                .labelsHidden()
+
+                dateNumberField(
+                    label: "Day",
+                    value: dateComponentBinding($selectedDate, .day),
+                    width: 54
+                )
+
+                dateNumberField(
+                    label: "Year",
+                    value: dateComponentBinding($selectedDate, .year),
+                    width: 78
+                )
+
+                Spacer(minLength: 0)
             }
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Day")
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 Text(dayOfWeekText(for: selectedDate))
-                    .font(.headline)
-            }
+                    .font(.caption)
+                    .bold()
+                    .foregroundStyle(.secondary)
 
-            Spacer()
+                Spacer()
+            }
         }
-        .padding(12)
+        .padding(8)
         .background(insetPanelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Time Section
 
     private var timeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Start Time")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 timeNumberField(
                     label: "Hour",
                     value: $hour,
@@ -355,18 +402,107 @@ struct EventEditorView: View {
                 Spacer()
             }
         }
-        .padding(12)
+        .padding(8)
         .background(insetPanelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var endDateTimeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("End Date")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .top, spacing: 8) {
+                dateNumberField(
+                    label: "Month",
+                    value: dateComponentBinding($repeatUntil, .month),
+                    width: 62
+                )
+
+                dateNumberField(
+                    label: "Day",
+                    value: dateComponentBinding($repeatUntil, .day),
+                    width: 54
+                )
+
+                dateNumberField(
+                    label: "Year",
+                    value: dateComponentBinding($repeatUntil, .year),
+                    width: 78
+                )
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(dayOfWeekText(for: repeatUntil))
+                    .font(.caption)
+                    .bold()
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+
+            Text("The series may run through the selected End Date.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var intervalEndTimeInput: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("End Time")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .top, spacing: 10) {
+                timeNumberField(
+                    label: "Hour",
+                    value: intervalEndHourBinding,
+                    range: appState.use24HourTime ? 0...23 : 1...12
+                )
+
+                timeNumberField(
+                    label: "Minute",
+                    value: intervalEndMinuteBinding,
+                    range: 0...59
+                )
+
+                if appState.use24HourTime == false {
+                    meridiemPicker(selection: intervalEndMeridiemBinding)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text("End Time is inclusive. If the final Event lands exactly on this time, it will run then stop.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var meridiemPicker: some View {
+        meridiemPicker(selection: $meridiem)
+    }
+
+    private func meridiemPicker(selection: Binding<Meridiem>) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("AM / PM")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Picker("AM / PM", selection: $meridiem) {
+            Picker("AM / PM", selection: selection) {
                 ForEach(Meridiem.allCases) { value in
                     Text(value.rawValue).tag(value)
                 }
@@ -393,86 +529,297 @@ struct EventEditorView: View {
                 format: .number.grouping(.never)
             )
             .textFieldStyle(.roundedBorder)
-            .frame(width: 76)
+            .frame(width: 70)
             .monospacedDigit()
             .onChange(of: value.wrappedValue) { _, newValue in
                 value.wrappedValue = clamped(newValue, to: range)
             }
-
-            Stepper(
-                "",
-                value: value,
-                in: range
-            )
-            .labelsHidden()
-            .frame(width: 76)
         }
     }
 
-    // MARK: - Repeat Section
+    private func dateNumberField(
+        label: String,
+        value: Binding<Int>,
+        width: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-    private var repeatSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Toggle("Repeat", isOn: $repeatsDaily)
-                .toggleStyle(.switch)
+            TextField(
+                label,
+                value: value,
+                format: .number.grouping(.never)
+            )
+            .textFieldStyle(.roundedBorder)
+            .frame(width: width)
+            .monospacedDigit()
+        }
+    }
+
+    private enum DateEditorComponent {
+        case month
+        case day
+        case year
+    }
+
+    private func dateComponentBinding(
+        _ date: Binding<Date>,
+        _ component: DateEditorComponent
+    ) -> Binding<Int> {
+        Binding<Int> {
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.year, .month, .day], from: date.wrappedValue)
+
+            switch component {
+            case .month:
+                return components.month ?? 1
+            case .day:
+                return components.day ?? 1
+            case .year:
+                return components.year ?? 2026
+            }
+        } set: { newValue in
+            updateDateComponent(date, component, newValue)
+        }
+    }
+
+    private func updateDateComponent(
+        _ date: Binding<Date>,
+        _ component: DateEditorComponent,
+        _ newValue: Int
+    ) {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date.wrappedValue)
+
+        let currentYear = components.year ?? 2026
+        let currentMonth = components.month ?? 1
+
+        switch component {
+        case .month:
+            components.month = clamped(newValue, to: 1...12)
+        case .day:
+            let maximumDay = daysInMonth(year: currentYear, month: currentMonth)
+            components.day = clamped(newValue, to: 1...maximumDay)
+        case .year:
+            components.year = clamped(newValue, to: 2000...2099)
+        }
+
+        let safeYear = components.year ?? currentYear
+        let safeMonth = components.month ?? currentMonth
+        let maximumDay = daysInMonth(year: safeYear, month: safeMonth)
+        components.day = min(max(components.day ?? 1, 1), maximumDay)
+
+        if let updatedDate = calendar.date(from: components) {
+            date.wrappedValue = updatedDate
+        }
+    }
+
+    private func daysInMonth(year: Int, month: Int) -> Int {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+
+        let calendar = Calendar.current
+        guard let date = calendar.date(from: components),
+              let range = calendar.range(of: .day, in: .month, for: date) else {
+            return 31
+        }
+
+        return range.count
+    }
+
+    private var intervalEndHourBinding: Binding<Int> {
+        Binding<Int> {
+            let hour24 = Calendar.current.component(.hour, from: intervalEndTime)
+            return appState.use24HourTime ? hour24 : Self.twelveHour(from: hour24)
+        } set: { newValue in
+            setIntervalEndTime(hour: newValue)
+        }
+    }
+
+    private var intervalEndMinuteBinding: Binding<Int> {
+        Binding<Int> {
+            Calendar.current.component(.minute, from: intervalEndTime)
+        } set: { newValue in
+            setIntervalEndTime(minute: newValue)
+        }
+    }
+
+    private var intervalEndMeridiemBinding: Binding<Meridiem> {
+        Binding<Meridiem> {
+            Calendar.current.component(.hour, from: intervalEndTime) >= 12 ? .pm : .am
+        } set: { newValue in
+            setIntervalEndTime(meridiem: newValue)
+        }
+    }
+
+    private func setIntervalEndTime(
+        hour: Int? = nil,
+        minute: Int? = nil,
+        meridiem: Meridiem? = nil
+    ) {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: intervalEndTime)
+        let currentHour24 = components.hour ?? 0
+        let selectedMeridiem = meridiem ?? (currentHour24 >= 12 ? .pm : .am)
+
+        if let hour {
+            if appState.use24HourTime {
+                components.hour = clamped(hour, to: 0...23)
+            } else {
+                components.hour = Self.twentyFourHour(
+                    fromTwelveHour: clamped(hour, to: 1...12),
+                    meridiem: selectedMeridiem
+                )
+            }
+        } else if let meridiem {
+            components.hour = Self.twentyFourHour(
+                fromTwelveHour: Self.twelveHour(from: currentHour24),
+                meridiem: meridiem
+            )
+        }
+
+        if let minute {
+            components.minute = clamped(minute, to: 0...59)
+        }
+
+        components.second = 0
+
+        if let updatedDate = calendar.date(from: components) {
+            intervalEndTime = updatedDate
+        }
+    }
+
+    private static func twelveHour(from hour24: Int) -> Int {
+        let hour = hour24 % 12
+        return hour == 0 ? 12 : hour
+    }
+
+    private static func twentyFourHour(
+        fromTwelveHour hour: Int,
+        meridiem: Meridiem
+    ) -> Int {
+        let normalizedHour = hour == 12 ? 0 : hour
+        return meridiem == .pm ? normalizedHour + 12 : normalizedHour
+    }
+
+    // MARK: - Repeat Card
+
+    private var repeatCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                sectionHeader(
+                    title: "Repeat",
+                    subtitle: "Create one Event or a recurring series."
+                )
+
+                Toggle("", isOn: $repeatsDaily)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
 
             if repeatsDaily {
                 repeatOptions
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "calendar")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text("This Event will run once at the selected date and time.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+                }
+                .padding(12)
+                .background(insetPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .padding(10)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var repeatOptions: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            seriesNameField
+
+            repeatSubsection(
+                title: "Repeat Days",
+                subtitle: "Choose which days can generate Events."
+            ) {
+                weekdaySelectionGrid
+                repeatQuickButtons
+                repeatValidationMessage
+            }
+
+            repeatSubsection(
+                title: "Time Pattern",
+                subtitle: "Run once per selected day, or repeat within each selected day."
+            ) {
+                repeatPatternSection
             }
         }
     }
 
-    private var repeatOptions: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            seriesNameField
+    private func repeatSubsection<Content: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .bold()
 
-            Divider()
-                .opacity(0.45)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
-            Text("Repeat Days")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            weekdaySelectionGrid
-            repeatQuickButtons
-            repeatValidationMessage
-
-            Divider()
-                .opacity(0.45)
-
-            repeatPatternSection
-
-            Divider()
-                .opacity(0.45)
-
-            repeatUntilPicker
+            content()
         }
-        .padding(12)
+        .padding(8)
         .background(insetPanelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var seriesNameField: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Series Name")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Text("Series Name")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-            TextField("Optional — for example, Daily Loop or Six Times Per Hour", text: $seriesName)
+                Text("Optional")
+                    .font(.caption2)
+                    .bold()
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.blue.opacity(0.14)))
+            }
+
+            TextField("For example: Daily Loop or Six Times Per Hour", text: $seriesName)
                 .textFieldStyle(.roundedBorder)
 
-            Text("Optional. Launch Control Center uses a hidden identifier for the series, so this can be left blank.")
+            Text("This can be left blank. Launch Control Center uses a hidden series identifier under the hood.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+        .padding(8)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var repeatPatternSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Time Pattern")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             Picker("Time Pattern", selection: $repeatMode) {
                 Text("Once per selected day").tag(ScheduleRepeatMode.oncePerSelectedDay)
                 Text("Repeat during selected days").tag(ScheduleRepeatMode.intervalDuringDay)
@@ -487,44 +834,38 @@ struct EventEditorView: View {
 
     private var intervalOptions: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Repeat Every")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    TextField(
-                        "Minutes",
-                        value: $intervalMinutes,
-                        format: .number.grouping(.never)
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 90)
-                    .monospacedDigit()
-                    .onChange(of: intervalMinutes) { _, newValue in
-                        intervalMinutes = clamped(newValue, to: 1...1_440)
+                    HStack(spacing: 8) {
+                        TextField(
+                            "Minutes",
+                            value: $intervalMinutes,
+                            format: .number.grouping(.never)
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .monospacedDigit()
+                        .onChange(of: intervalMinutes) { _, newValue in
+                            intervalMinutes = clamped(newValue, to: 1...1_440)
+                        }
+
+                        Text("minutes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("End Time")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    DatePicker(
-                        "End Time",
-                        selection: $intervalEndTime,
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .labelsHidden()
                 }
 
                 Spacer()
             }
 
             intervalPresetButtons
+            intervalEndTimeInput
 
-            Text("End Time is inclusive. If the final Event lands exactly on this time, it will run at this time, then stop. Example: every 10 minutes from 1:10 PM until 8:00 PM includes 8:00 PM.")
+            Text("The End Date is set in the When section above. Daily repeating Events cannot cross midnight in this version.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
@@ -557,7 +898,7 @@ struct EventEditorView: View {
     }
 
     private var repeatQuickButtons: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Button("Every Day") {
                 repeatWeekdays = Set(1...7)
             }
@@ -588,25 +929,16 @@ struct EventEditorView: View {
     }
 
     private var repeatUntilPicker: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Series End Date")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 7) {
+            DatePicker(
+                "Series End Date",
+                selection: $repeatUntil,
+                displayedComponents: [.date]
+            )
 
-                DatePicker(
-                    "Series End Date",
-                    selection: $repeatUntil,
-                    displayedComponents: [.date]
-                )
-                .labelsHidden()
-
-                Text("The series may run through this date. For interval repeats, the daily End Time controls the last run within each selected day.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
+            Text("The series may run through this date. For interval repeats, the daily End Time controls the last run within each selected day.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -677,7 +1009,7 @@ struct EventEditorView: View {
         let endDay = calendar.startOfDay(for: repeatUntil)
 
         if endDay < startDay {
-            issues.append(.error("Series End Date must be on or after the Start Date."))
+            issues.append(.error("End Date must be on or after the Start Date."))
         }
 
         if repeatMode == .intervalDuringDay {
@@ -731,12 +1063,12 @@ struct EventEditorView: View {
             }
             .padding(10)
             .background(insetPanelBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .padding(14)
+        .padding(10)
         .background(cardBackground)
         .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Preview
@@ -755,7 +1087,7 @@ struct EventEditorView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                     .background(insetPanelBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     previewAuditSummary
@@ -763,10 +1095,10 @@ struct EventEditorView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(10)
         .background(cardBackground)
         .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var previewAuditSummary: some View {
@@ -786,6 +1118,8 @@ struct EventEditorView: View {
             VStack(alignment: .leading, spacing: 5) {
                 previewSummaryLine("Schedule", previewScheduleDescription)
                 previewSummaryLine("Generated Events", previewTotalCountText)
+                previewSummaryLine("First Occurrence", previewFirstOccurrenceText)
+                previewSummaryLine("Last Occurrence", previewLastOccurrenceText)
 
                 if repeatsDaily {
                     previewSummaryLine("Selected Days", ScheduleEntryFormatter.weekdaySummary(for: repeatWeekdays))
@@ -798,9 +1132,9 @@ struct EventEditorView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
+        .padding(8)
         .background(insetPanelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func previewSummaryLine(
@@ -856,9 +1190,9 @@ struct EventEditorView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
+        .padding(8)
         .background(insetPanelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var previewSubtitle: String {
@@ -890,8 +1224,42 @@ struct EventEditorView: View {
     }
 
     private var previewTotalCountText: String {
+        guard let previewEvent = makePreviewEvent() else {
+            return "—"
+        }
+
+        if previewEvent.repeatsDaily, previewEvent.repeatUntil == nil {
+            return "Open-ended; showing upcoming Events"
+        }
+
         let count = previewTotalOccurrenceCount
         return "\(count) Event\(count == 1 ? "" : "s")"
+    }
+
+    private var previewFirstOccurrenceText: String {
+        guard let previewEvent = makePreviewEvent(),
+              let first = generatedPreviewOccurrences(for: previewEvent, limit: 1).first else {
+            return "—"
+        }
+
+        return Self.previewFormatter.string(from: first)
+    }
+
+    private var previewLastOccurrenceText: String {
+        guard let previewEvent = makePreviewEvent() else {
+            return "—"
+        }
+
+        if previewEvent.repeatsDaily, previewEvent.repeatUntil == nil {
+            return "Open-ended"
+        }
+
+        let occurrences = generatedPreviewOccurrences(for: previewEvent, limit: 10_000)
+        guard let last = occurrences.last else {
+            return "—"
+        }
+
+        return Self.previewFormatter.string(from: last)
     }
 
     private var previewOccurrencesPerActiveDayText: String {
@@ -941,7 +1309,7 @@ struct EventEditorView: View {
     private func firstActiveDayOccurrences(for previewEvent: ScheduleEntry) -> [Date] {
         let calendar = Calendar.current
         var day = calendar.startOfDay(for: previewEvent.startDate)
-        let finalDay = calendar.startOfDay(for: previewEvent.repeatUntil ?? previewEvent.startDate)
+        let finalDay = calendar.startOfDay(for: previewEvent.repeatUntil ?? Self.previewOpenEndedDate(from: previewEvent.startDate))
         var guardCount = 0
 
         while day <= finalDay, guardCount < 370 {
@@ -979,7 +1347,7 @@ struct EventEditorView: View {
         let calendar = Calendar.current
         var occurrences: [Date] = []
         var day = calendar.startOfDay(for: previewEvent.startDate)
-        let finalDay = calendar.startOfDay(for: previewEvent.repeatUntil ?? previewEvent.startDate)
+        let finalDay = calendar.startOfDay(for: previewEvent.repeatUntil ?? Self.previewOpenEndedDate(from: previewEvent.startDate))
         var guardCount = 0
 
         while day <= finalDay, occurrences.count < limit, guardCount < 370 {
@@ -1069,7 +1437,7 @@ struct EventEditorView: View {
         .padding(20)
         .background(cardBackground)
         .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Add Event
@@ -1196,6 +1564,10 @@ struct EventEditorView: View {
         return calendar.date(from: components) ?? nextMinute
     }
 
+    private static func previewOpenEndedDate(from date: Date) -> Date {
+        Calendar.current.date(byAdding: .day, value: 370, to: date) ?? date
+    }
+
     private static func defaultRepeatUntilDate() -> Date {
         let calendar = Calendar.current
         let now = Date()
@@ -1294,18 +1666,18 @@ struct EventEditorView: View {
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
             .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
     }
 
     private var cardBorder: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
     }
 
     private var insetPanelBackground: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(Color(nsColor: .textBackgroundColor).opacity(0.18))
     }
 
