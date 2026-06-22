@@ -60,7 +60,7 @@ struct EventEditorView: View {
     }
 
     private var canAddEvent: Bool {
-        selectedActionID != nil && repeatSelectionIsValid && intervalSelectionIsValid
+        validationIssues.contains { $0.severity == .error } == false
     }
 
     private var repeatSelectionIsValid: Bool {
@@ -115,6 +115,11 @@ struct EventEditorView: View {
                         VStack(alignment: .leading, spacing: 18) {
                             actionCard
                             scheduleCard
+
+                            if validationIssues.isEmpty == false {
+                                validationCard
+                            }
+
                             previewCard
                         }
                         .padding(.trailing, 6)
@@ -648,6 +653,90 @@ struct EventEditorView: View {
         } else {
             repeatWeekdays.insert(weekday)
         }
+    }
+
+    // MARK: - Validation
+
+    private var validationIssues: [EventScheduleValidationIssue] {
+        var issues: [EventScheduleValidationIssue] = []
+
+        if selectedActionID == nil {
+            issues.append(.error("Choose an Action before saving this Event."))
+        }
+
+        guard repeatsDaily else {
+            return issues
+        }
+
+        if repeatWeekdays.isEmpty {
+            issues.append(.error("Select at least one repeat day."))
+        }
+
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: composedStartDate())
+        let endDay = calendar.startOfDay(for: repeatUntil)
+
+        if endDay < startDay {
+            issues.append(.error("Series End Date must be on or after the Start Date."))
+        }
+
+        if repeatMode == .intervalDuringDay {
+            if intervalMinutes <= 0 {
+                issues.append(.error("Repeat Every must be at least 1 minute."))
+            }
+
+            if intervalCrossesMidnight {
+                issues.append(.error("Daily repeating Events cannot cross midnight yet. Create a second Event series for the next day."))
+            }
+
+            if intervalMinutes < 5 {
+                issues.append(.warning("This creates a very frequent schedule. Confirm that the target systems can safely receive Events this often."))
+            }
+        }
+
+        let generatedCount = previewTotalOccurrenceCount
+
+        if generatedCount == 0 {
+            issues.append(.error("These settings do not generate any Events. Adjust the date range, repeat days, or time settings."))
+        } else if generatedCount > 500 {
+            issues.append(.warning("This series generates \(generatedCount) Events. That may be intentional, but review the preview before saving."))
+        }
+
+        return issues
+    }
+
+    private var validationCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader(
+                title: "Schedule Check",
+                subtitle: "Review warnings and fix errors before saving."
+            )
+
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(validationIssues) { issue in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: issue.severity.systemImageName)
+                            .font(.caption)
+                            .foregroundStyle(issue.severity.color)
+                            .frame(width: 16)
+
+                        Text(issue.message)
+                            .font(.caption)
+                            .foregroundStyle(issue.severity.color)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(10)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     // MARK: - Preview
@@ -1237,6 +1326,50 @@ struct EventEditorView: View {
                     : Color.white.opacity(0.08),
                 lineWidth: 1
             )
+    }
+}
+
+// MARK: - Validation Issue
+
+private struct EventScheduleValidationIssue: Identifiable, Equatable {
+    enum Severity: Equatable {
+        case error
+        case warning
+
+        var color: Color {
+            switch self {
+            case .error:
+                return .red
+
+            case .warning:
+                return .orange
+            }
+        }
+
+        var systemImageName: String {
+            switch self {
+            case .error:
+                return "xmark.octagon.fill"
+
+            case .warning:
+                return "exclamationmark.triangle.fill"
+            }
+        }
+    }
+
+    let severity: Severity
+    let message: String
+
+    var id: String {
+        "\(severity)-\(message)"
+    }
+
+    static func error(_ message: String) -> EventScheduleValidationIssue {
+        EventScheduleValidationIssue(severity: .error, message: message)
+    }
+
+    static func warning(_ message: String) -> EventScheduleValidationIssue {
+        EventScheduleValidationIssue(severity: .warning, message: message)
     }
 }
 

@@ -2262,6 +2262,10 @@ private struct ScheduleEventEditSheet: View {
                     if editScope == .entireSeries {
                         repeatSection
 
+                        if editValidationIssues.isEmpty == false {
+                            editValidationCard
+                        }
+
                         if repeatsDaily {
                             seriesPreviewCard
                         }
@@ -2760,6 +2764,98 @@ private struct ScheduleEventEditSheet: View {
             .map { $0 }
     }
 
+    private var editValidationIssues: [ScheduleEditValidationIssue] {
+        var issues: [ScheduleEditValidationIssue] = []
+
+        if selectedActionID == nil {
+            issues.append(.error("Choose an Action before saving this Event."))
+        }
+
+        // Editing one generated occurrence detaches it into a standalone Event.
+        // Series recurrence checks are intentionally skipped for this scope.
+        if occurrence.event.repeatsDaily && editScope == .thisOccurrence {
+            return issues
+        }
+
+        guard repeatsDaily else {
+            return issues
+        }
+
+        if repeatWeekdays.isEmpty {
+            issues.append(.error("Select at least one repeat day."))
+        }
+
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: composedDate())
+        let endDay = calendar.startOfDay(for: repeatUntil)
+
+        if endDay < startDay {
+            issues.append(.error("Series End Date must be on or after the Start Date."))
+        }
+
+        if repeatMode == .intervalDuringDay {
+            if intervalMinutes <= 0 {
+                issues.append(.error("Repeat Every must be at least 1 minute."))
+            }
+
+            if intervalCrossesMidnight {
+                issues.append(.error("Daily repeating Events cannot cross midnight yet. Create a second Event series for the next day."))
+            }
+
+            if intervalMinutes < 5 {
+                issues.append(.warning("This creates a very frequent schedule. Confirm that the target systems can safely receive Events this often."))
+            }
+        }
+
+        let generatedCount = previewTotalOccurrenceCount
+
+        if generatedCount == 0 {
+            issues.append(.error("These settings do not generate any Events. Adjust the date range, repeat days, or time settings."))
+        } else if generatedCount > 500 {
+            issues.append(.warning("This series generates \(generatedCount) Events. That may be intentional, but review the preview before saving."))
+        }
+
+        return issues
+    }
+
+    private var editValidationCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Schedule Check")
+                    .font(.caption)
+                    .bold()
+
+                Text("Warnings are allowed. Errors must be fixed before saving.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(editValidationIssues) { issue in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: issue.severity.systemImageName)
+                            .font(.caption2)
+                            .foregroundStyle(issue.severity.color)
+                            .frame(width: 14)
+
+                        Text(issue.message)
+                            .font(.caption2)
+                            .foregroundStyle(issue.severity.color)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     private var footer: some View {
         HStack {
             Button("Cancel") {
@@ -2777,27 +2873,7 @@ private struct ScheduleEventEditSheet: View {
     }
 
     private var canSave: Bool {
-        guard selectedActionID != nil else {
-            return false
-        }
-
-        // Editing a single generated occurrence detaches it into a standalone Event.
-        // Recurring-series validation such as repeat weekdays and interval end time
-        // should not block this save, because those fields are not being saved to
-        // the new standalone Event.
-        if occurrence.event.repeatsDaily && editScope == .thisOccurrence {
-            return true
-        }
-
-        if repeatsDaily && repeatWeekdays.isEmpty {
-            return false
-        }
-
-        if repeatsDaily && repeatMode == .intervalDuringDay {
-            return intervalMinutes > 0 && intervalCrossesMidnight == false
-        }
-
-        return true
+        editValidationIssues.contains { $0.severity == .error } == false
     }
 
     private var intervalCrossesMidnight: Bool {
@@ -2975,6 +3051,50 @@ private struct ScheduleEventEditSheet: View {
         formatter.dateStyle = .none
         return formatter
     }()
+}
+
+// MARK: - Schedule Edit Validation Issue
+
+private struct ScheduleEditValidationIssue: Identifiable, Equatable {
+    enum Severity: Equatable {
+        case error
+        case warning
+
+        var color: Color {
+            switch self {
+            case .error:
+                return .red
+
+            case .warning:
+                return .orange
+            }
+        }
+
+        var systemImageName: String {
+            switch self {
+            case .error:
+                return "xmark.octagon.fill"
+
+            case .warning:
+                return "exclamationmark.triangle.fill"
+            }
+        }
+    }
+
+    let severity: Severity
+    let message: String
+
+    var id: String {
+        "\(severity)-\(message)"
+    }
+
+    static func error(_ message: String) -> ScheduleEditValidationIssue {
+        ScheduleEditValidationIssue(severity: .error, message: message)
+    }
+
+    static func warning(_ message: String) -> ScheduleEditValidationIssue {
+        ScheduleEditValidationIssue(severity: .warning, message: message)
+    }
 }
 
 // MARK: - Models
