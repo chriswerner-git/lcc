@@ -5,14 +5,17 @@
 //  └─────────────────────────────────────────────────────────────┘
 //
 //  File: ScheduleCalendarView.swift
-//  Purpose: Schedule calendar interface for viewing, editing, and managing Events.
+//  Purpose: Schedule calendar and list interface for viewing, editing,
+//           auditing, and managing scheduled Events.
 //
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
 //  Notes:
-//  - Supports month and week schedule views.
+//  - Supports Calendar and List presentations.
+//  - Supports day, week, and month schedule ranges.
 //  - Scheduled Events trigger saved ActionDefinition records.
-//  - Repeating Events may include selected weekdays, repeat-until dates, and excluded occurrences.
+//  - Repeating Events may include selected weekdays, repeat-until dates,
+//    and excluded occurrences.
 //  - Week start behavior follows the app preference in AppState.
 //
 
@@ -24,13 +27,15 @@ struct ScheduleCalendarView: View {
 
     @AppStorage("scheduleHourRowHeight") private var storedHourRowHeight: Double = 92
 
+    @State private var selectedPresentationMode: SchedulePresentationMode = .calendar
+    @State private var selectedRangeMode: ScheduleRangeMode = .week
+
+    @State private var visibleDayDate: Date = Date()
     @State private var visibleWeekStart: Date = ScheduleCalendarView.startOfWeek(
         containing: Date(),
         startingOn: 1
     )
-
     @State private var visibleMonthDate: Date = Date()
-    @State private var selectedViewMode: ScheduleViewMode = .week
 
     @State private var editingOccurrence: ScheduleOccurrence?
     @State private var deletingOccurrence: ScheduleOccurrence?
@@ -42,9 +47,48 @@ struct ScheduleCalendarView: View {
         CGFloat(storedHourRowHeight)
     }
 
+    private var availableRangeModes: [ScheduleRangeMode] {
+        switch selectedPresentationMode {
+        case .calendar:
+            return [.day, .week, .month]
+
+        case .list:
+            return [.day, .month]
+        }
+    }
+
     private var weekDays: [Date] {
-        (0..<7).compactMap {
-            Calendar.current.date(byAdding: .day, value: $0, to: visibleWeekStart)
+        days(
+            startingAt: visibleWeekStart,
+            count: 7
+        )
+    }
+
+    private var visibleCalendarDays: [Date] {
+        switch selectedRangeMode {
+        case .day:
+            return [Calendar.current.startOfDay(for: visibleDayDate)]
+
+        case .week:
+            return weekDays
+
+        case .month:
+            return monthCalendarDays.map { $0.date }
+        }
+    }
+
+    private var visibleListDays: [Date] {
+        switch selectedRangeMode {
+        case .day:
+            return [Calendar.current.startOfDay(for: visibleDayDate)]
+
+        case .week:
+            // List View no longer exposes Week as a selectable range.
+            // Keep this fallback so a previously selected Week range degrades safely.
+            return [Calendar.current.startOfDay(for: visibleDayDate)]
+
+        case .month:
+            return actualMonthDays
         }
     }
 
@@ -69,24 +113,29 @@ struct ScheduleCalendarView: View {
                 header
                 topControls
 
-                switch selectedViewMode {
-                case .week:
-                    weekGrid
+                switch selectedPresentationMode {
+                case .calendar:
+                    calendarContent
 
-                case .month:
-                    monthGrid
+                case .list:
+                    scheduleList
                 }
             }
             .padding(20)
         }
         .frame(minWidth: 1220, minHeight: 780)
         .onAppear {
+            let now = Date()
+            visibleDayDate = now
             visibleWeekStart = Self.startOfWeek(
-                containing: Date(),
+                containing: now,
                 startingOn: appState.weekStartDay
             )
-
-            visibleMonthDate = Date()
+            visibleMonthDate = now
+            normalizeRangeForCurrentPresentation()
+        }
+        .onChange(of: selectedPresentationMode) { _, _ in
+            normalizeRangeForCurrentPresentation()
         }
         .onChange(of: appState.weekStartDay) { _, newValue in
             visibleWeekStart = Self.startOfWeek(
@@ -148,7 +197,7 @@ struct ScheduleCalendarView: View {
                     .font(.largeTitle)
                     .bold()
 
-                Text("Weekly time grid and monthly overview of scheduled Events.")
+                Text("Calendar and list views for auditing and managing scheduled Events.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -174,14 +223,23 @@ struct ScheduleCalendarView: View {
     private var topControls: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Picker("", selection: $selectedViewMode) {
-                    ForEach(ScheduleViewMode.allCases) { mode in
+                Picker("View", selection: $selectedPresentationMode) {
+                    ForEach(SchedulePresentationMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 180)
+                .frame(width: 220)
+
+                Picker("Range", selection: $selectedRangeMode) {
+                    ForEach(availableRangeModes) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 210)
 
                 Divider()
                     .frame(height: 22)
@@ -214,8 +272,8 @@ struct ScheduleCalendarView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if selectedViewMode == .week {
-                HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                if selectedPresentationMode == .calendar && selectedRangeMode != .month {
                     Text("Hour Height")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -227,31 +285,43 @@ struct ScheduleCalendarView: View {
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .frame(width: 32, alignment: .trailing)
-
-                    Text("Right-click Events for Run, Edit, Delete. Double-click to edit.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
                 }
+
+                Text("Right-click Events for Run, Edit, Delete. Double-click to edit.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
             }
         }
     }
 
     private var previousButtonTitle: String {
-        selectedViewMode == .week ? "Previous Week" : "Previous Month"
+        "Previous \(selectedRangeMode.rawValue)"
     }
 
     private var currentButtonTitle: String {
-        selectedViewMode == .week ? "This Week" : "This Month"
+        switch selectedRangeMode {
+        case .day:
+            return "Today"
+
+        case .week:
+            return "This Week"
+
+        case .month:
+            return "This Month"
+        }
     }
 
     private var nextButtonTitle: String {
-        selectedViewMode == .week ? "Next Week" : "Next Month"
+        "Next \(selectedRangeMode.rawValue)"
     }
 
     private var visibleRangeText: String {
-        switch selectedViewMode {
+        switch selectedRangeMode {
+        case .day:
+            return Self.fullDateFormatter.string(from: visibleDayDate)
+
         case .week:
             return weekRangeText
 
@@ -260,30 +330,51 @@ struct ScheduleCalendarView: View {
         }
     }
 
-    // MARK: - Week Grid
+    // MARK: - Calendar Content
 
-    private var weekGrid: some View {
+    @ViewBuilder
+    private var calendarContent: some View {
+        switch selectedRangeMode {
+        case .day:
+            timeGrid(days: [Calendar.current.startOfDay(for: visibleDayDate)])
+
+        case .week:
+            timeGrid(days: weekDays)
+
+        case .month:
+            monthGrid
+        }
+    }
+
+    // MARK: - Time Grid
+
+    private func timeGrid(days: [Date]) -> some View {
         GeometryReader { geometry in
-            let dayColumnWidth = max((geometry.size.width - timeColumnWidth) / 7, 124)
-            let gridWidth = timeColumnWidth + (dayColumnWidth * 7)
+            let columnCount = max(days.count, 1)
+            let dayColumnWidth = max((geometry.size.width - timeColumnWidth) / CGFloat(columnCount), 124)
+            let gridWidth = timeColumnWidth + (dayColumnWidth * CGFloat(columnCount))
             let gridHeight = hourRowHeight * 24
 
             VStack(spacing: 0) {
-                dayHeaderRow(dayColumnWidth: dayColumnWidth)
+                dayHeaderRow(
+                    days: days,
+                    dayColumnWidth: dayColumnWidth
+                )
 
                 ScrollView(.vertical) {
                     ZStack(alignment: .topLeading) {
-                        weeklyGridLines(
+                        timeGridLines(
                             width: gridWidth,
                             height: gridHeight,
-                            dayColumnWidth: dayColumnWidth
+                            dayColumnWidth: dayColumnWidth,
+                            dayCount: columnCount
                         )
 
                         HStack(alignment: .top, spacing: 0) {
                             hourLabelColumn
 
                             HStack(alignment: .top, spacing: 0) {
-                                ForEach(weekDays, id: \.self) { day in
+                                ForEach(days, id: \.self) { day in
                                     dayTimeColumn(
                                         day: day,
                                         width: dayColumnWidth
@@ -302,10 +393,11 @@ struct ScheduleCalendarView: View {
         }
     }
 
-    private func weeklyGridLines(
+    private func timeGridLines(
         width: CGFloat,
         height: CGFloat,
-        dayColumnWidth: CGFloat
+        dayColumnWidth: CGFloat,
+        dayCount: Int
     ) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(0...24, id: \.self) { hour in
@@ -315,7 +407,7 @@ struct ScheduleCalendarView: View {
                     .offset(y: CGFloat(hour) * hourRowHeight)
             }
 
-            ForEach(0...7, id: \.self) { column in
+            ForEach(0...dayCount, id: \.self) { column in
                 Rectangle()
                     .fill(Color.white.opacity(0.08))
                     .frame(width: 1, height: height)
@@ -330,7 +422,10 @@ struct ScheduleCalendarView: View {
         .allowsHitTesting(false)
     }
 
-    private func dayHeaderRow(dayColumnWidth: CGFloat) -> some View {
+    private func dayHeaderRow(
+        days: [Date],
+        dayColumnWidth: CGFloat
+    ) -> some View {
         HStack(spacing: 0) {
             VStack(alignment: .trailing) {
                 Spacer()
@@ -344,7 +439,7 @@ struct ScheduleCalendarView: View {
             .frame(width: timeColumnWidth, height: dayHeaderHeight)
             .background(headerBackground)
 
-            ForEach(weekDays, id: \.self) { day in
+            ForEach(days, id: \.self) { day in
                 dayHeaderCell(day)
                     .frame(width: dayColumnWidth, height: dayHeaderHeight)
                     .background(headerBackground)
@@ -358,7 +453,7 @@ struct ScheduleCalendarView: View {
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(shortWeekdayText(for: day))
+                Text(Self.shortWeekdayFormatter.string(from: day))
                     .font(.headline)
 
                 Spacer()
@@ -371,10 +466,10 @@ struct ScheduleCalendarView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(dayNumberText(for: day))
+                Text(Self.dayNumberFormatter.string(from: day))
                     .font(.system(size: 28, weight: .semibold, design: .rounded))
 
-                Text(monthText(for: day))
+                Text(Self.shortMonthFormatter.string(from: day))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -463,6 +558,43 @@ struct ScheduleCalendarView: View {
         .background(hourBackground(hour: hour))
     }
 
+    // MARK: - List View
+
+    private var scheduleList: some View {
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(scheduleListGroups) { group in
+                    ScheduleListDaySection(
+                        group: group,
+                        use24HourTime: appState.use24HourTime,
+                        runAction: { occurrence in
+                            appState.runAction(occurrence.action)
+                        },
+                        editAction: { occurrence in
+                            editingOccurrence = occurrence
+                        },
+                        deleteAction: { occurrence in
+                            deletingOccurrence = occurrence
+                        }
+                    )
+                }
+            }
+            .padding(14)
+        }
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var scheduleListGroups: [ScheduleListDayGroup] {
+        visibleListDays.map { day in
+            ScheduleListDayGroup(
+                date: day,
+                occurrences: eventOccurrences(on: day)
+            )
+        }
+    }
+
     // MARK: - Month Grid
 
     private var monthGrid: some View {
@@ -481,6 +613,8 @@ struct ScheduleCalendarView: View {
                             calendarDay: calendarDay,
                             showCount: showEventCount(on: calendarDay.date),
                             utilityCount: utilityEventCount(on: calendarDay.date),
+                            showActionsEnabled: appState.showActionsEnabled,
+                            utilityActionsEnabled: appState.utilityActionsEnabled,
                             isCurrentMonth: Calendar.current.isDate(
                                 calendarDay.date,
                                 equalTo: visibleMonthDate,
@@ -522,16 +656,22 @@ struct ScheduleCalendarView: View {
             startingOn: appState.weekStartDay
         )
 
-        return (0..<42).compactMap { offset in
-            guard let date = calendar.date(
-                byAdding: .day,
-                value: offset,
-                to: firstVisibleDay
-            ) else {
-                return nil
-            }
+        return days(startingAt: firstVisibleDay, count: 42).map { date in
+            MonthCalendarDay(date: date)
+        }
+    }
 
-            return MonthCalendarDay(date: date)
+    private var actualMonthDays: [Date] {
+        let calendar = Calendar.current
+        let monthStart = startOfMonth(for: visibleMonthDate)
+        let range = calendar.range(of: .day, in: .month, for: monthStart) ?? 1..<1
+
+        return range.compactMap { dayNumber in
+            calendar.date(
+                byAdding: .day,
+                value: dayNumber - 1,
+                to: monthStart
+            )
         }
     }
 
@@ -629,6 +769,7 @@ struct ScheduleCalendarView: View {
                 action: action,
                 occurrenceDate: occurrenceDate,
                 isPast: occurrenceDate < now,
+                scheduleCategoryEnabled: scheduleCategoryIsEnabled(for: action),
                 isNext: false
             )
 
@@ -665,17 +806,7 @@ struct ScheduleCalendarView: View {
     }
 
     private func nextOccurrenceID(now: Date) -> String? {
-        let visibleDays: [Date]
-
-        switch selectedViewMode {
-        case .week:
-            visibleDays = weekDays
-
-        case .month:
-            visibleDays = monthCalendarDays.map { $0.date }
-        }
-
-        let occurrences = visibleDays.flatMap { day in
+        let occurrences = visibleCalendarDays.flatMap { day in
             appState.scheduleEntries.compactMap { event -> ScheduleOccurrence? in
                 guard event.enabled else {
                     return nil
@@ -698,11 +829,16 @@ struct ScheduleCalendarView: View {
                     return nil
                 }
 
+                guard scheduleCategoryIsEnabled(for: action) else {
+                    return nil
+                }
+
                 return ScheduleOccurrence(
                     event: event,
                     action: action,
                     occurrenceDate: occurrenceDate,
                     isPast: occurrenceDate < now,
+                    scheduleCategoryEnabled: true,
                     isNext: false
                 )
             }
@@ -756,6 +892,16 @@ struct ScheduleCalendarView: View {
         event.repeatWeekdays.isEmpty ? Set(1...7) : event.repeatWeekdays
     }
 
+    private func scheduleCategoryIsEnabled(for action: ActionDefinition) -> Bool {
+        switch action.type {
+        case .show:
+            return appState.showActionsEnabled
+
+        case .utility:
+            return appState.utilityActionsEnabled
+        }
+    }
+
     private func occurrenceDate(
         on day: Date,
         usingTimeFrom timeSource: Date
@@ -785,8 +931,23 @@ struct ScheduleCalendarView: View {
 
     // MARK: - Navigation / Formatting
 
+    private func normalizeRangeForCurrentPresentation() {
+        guard availableRangeModes.contains(selectedRangeMode) == false else {
+            return
+        }
+
+        selectedRangeMode = .day
+    }
+
     private func moveVisibleRange(by offset: Int) {
-        switch selectedViewMode {
+        switch selectedRangeMode {
+        case .day:
+            visibleDayDate = Calendar.current.date(
+                byAdding: .day,
+                value: offset,
+                to: visibleDayDate
+            ) ?? visibleDayDate
+
         case .week:
             visibleWeekStart = Calendar.current.date(
                 byAdding: .day,
@@ -804,15 +965,20 @@ struct ScheduleCalendarView: View {
     }
 
     private func moveToCurrentRange() {
-        switch selectedViewMode {
+        let now = Date()
+
+        switch selectedRangeMode {
+        case .day:
+            visibleDayDate = now
+
         case .week:
             visibleWeekStart = Self.startOfWeek(
-                containing: Date(),
+                containing: now,
                 startingOn: appState.weekStartDay
             )
 
         case .month:
-            visibleMonthDate = Date()
+            visibleMonthDate = now
         }
     }
 
@@ -825,19 +991,11 @@ struct ScheduleCalendarView: View {
             return ""
         }
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d"
-
-        let yearFormatter = DateFormatter()
-        yearFormatter.dateFormat = "yyyy"
-
-        return "\(dateFormatter.string(from: visibleWeekStart)) – \(dateFormatter.string(from: weekEnd)), \(yearFormatter.string(from: weekEnd))"
+        return "\(Self.mediumDateFormatter.string(from: visibleWeekStart)) – \(Self.mediumDateFormatter.string(from: weekEnd)), \(Self.yearFormatter.string(from: weekEnd))"
     }
 
     private var monthRangeText: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: visibleMonthDate)
+        Self.monthYearFormatter.string(from: visibleMonthDate)
     }
 
     private func hourLabel(for hour: Int) -> String {
@@ -849,12 +1007,6 @@ struct ScheduleCalendarView: View {
         let suffix = hour < 12 ? "AM" : "PM"
 
         return "\(displayHour) \(suffix)"
-    }
-
-    private func shortWeekdayText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
-        return formatter.string(from: date)
     }
 
     private func shortWeekdayName(for weekday: Int) -> String {
@@ -870,16 +1022,17 @@ struct ScheduleCalendarView: View {
         }
     }
 
-    private func dayNumberText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d"
-        return formatter.string(from: date)
-    }
-
-    private func monthText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-        return formatter.string(from: date)
+    private func days(
+        startingAt startDate: Date,
+        count: Int
+    ) -> [Date] {
+        (0..<count).compactMap { offset in
+            Calendar.current.date(
+                byAdding: .day,
+                value: offset,
+                to: Calendar.current.startOfDay(for: startDate)
+            )
+        }
     }
 
     private func startOfMonth(for date: Date) -> Date {
@@ -906,6 +1059,50 @@ struct ScheduleCalendarView: View {
             to: startOfDay
         ) ?? startOfDay
     }
+
+    // MARK: - Static Formatters
+
+    private static let shortWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return formatter
+    }()
+
+    private static let dayNumberFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter
+    }()
+
+    private static let shortMonthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        return formatter
+    }()
+
+    private static let mediumDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+
+    private static let yearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+        return formatter
+    }()
+
+    private static let monthYearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }()
+
+    private static let fullDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d, yyyy"
+        return formatter
+    }()
 
     // MARK: - Styling
 
@@ -946,6 +1143,342 @@ struct ScheduleCalendarView: View {
     }
 }
 
+// MARK: - Schedule List
+
+private struct ScheduleListDaySection: View {
+    let group: ScheduleListDayGroup
+    let use24HourTime: Bool
+    let runAction: (ScheduleOccurrence) -> Void
+    let editAction: (ScheduleOccurrence) -> Void
+    let deleteAction: (ScheduleOccurrence) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(dayTitle)
+                        .font(.headline)
+
+                    Text(daySubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text(countText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color.white.opacity(0.07))
+                    )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.44))
+
+            if group.occurrences.isEmpty {
+                Text("No scheduled Events.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 18)
+                    .background(Color.white.opacity(0.018))
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(group.occurrences) { occurrence in
+                        ScheduleListOccurrenceRow(
+                            occurrence: occurrence,
+                            use24HourTime: use24HourTime,
+                            runAction: {
+                                runAction(occurrence)
+                            },
+                            editAction: {
+                                editAction(occurrence)
+                            },
+                            deleteAction: {
+                                deleteAction(occurrence)
+                            }
+                        )
+
+                        if occurrence.id != group.occurrences.last?.id {
+                            Divider()
+                                .opacity(0.28)
+                        }
+                    }
+                }
+                .background(Color.white.opacity(0.018))
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.52))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var dayTitle: String {
+        Self.dayTitleFormatter.string(from: group.date)
+    }
+
+    private var daySubtitle: String {
+        if Calendar.current.isDateInToday(group.date) {
+            return "Today"
+        }
+
+        return Self.daySubtitleFormatter.string(from: group.date)
+    }
+
+    private var countText: String {
+        let count = group.occurrences.count
+        return "\(count) \(count == 1 ? "Event" : "Events")"
+    }
+
+    private static let dayTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
+        return formatter
+    }()
+
+    private static let daySubtitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+        return formatter
+    }()
+}
+
+private struct ScheduleListOccurrenceRow: View {
+    let occurrence: ScheduleOccurrence
+    let use24HourTime: Bool
+    let runAction: () -> Void
+    let editAction: () -> Void
+    let deleteAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(timeText(for: occurrence.occurrenceDate))
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(occurrence.isPast ? .secondary : .primary)
+                .frame(width: 88, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(occurrence.action.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(primaryTextStyle)
+                        .lineLimit(1)
+
+                    if occurrence.isNext {
+                        statusPill(
+                            title: "Next",
+                            color: .blue
+                        )
+                    }
+                }
+
+                HStack(spacing: 7) {
+                    Text(repeatSummary)
+                        .font(.caption)
+                        .foregroundStyle(secondaryTextStyle)
+                        .lineLimit(1)
+
+                    Text("•")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+
+                    Text(eventStatusText)
+                        .font(.caption)
+                        .foregroundStyle(eventStatusColor)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            statusPill(
+                title: occurrence.action.type.rawValue,
+                color: actionColor
+            )
+
+            Button {
+                runAction()
+            } label: {
+                Image(systemName: "play.fill")
+            }
+            .buttonStyle(.borderless)
+            .help("Run Event Action")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .opacity(occurrence.isEffectivelyScheduled ? 1.0 : 0.58)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            editAction()
+        }
+        .contextMenu {
+            Button {
+                runAction()
+            } label: {
+                Label("Run Event Action", systemImage: "play.fill")
+            }
+
+            Button {
+                editAction()
+            } label: {
+                Label("Edit Event", systemImage: "pencil")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                deleteAction()
+            } label: {
+                Label("Delete Event", systemImage: "trash")
+            }
+        }
+    }
+
+    private var actionColor: Color {
+        switch occurrence.action.type {
+        case .show:
+            return .blue
+
+        case .utility:
+            return .purple
+        }
+    }
+
+    private var primaryTextStyle: AnyShapeStyle {
+        occurrence.isPast ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
+    }
+
+    private var secondaryTextStyle: AnyShapeStyle {
+        occurrence.isPast ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary)
+    }
+
+    private var eventStatusText: String {
+        if occurrence.event.enabled == false {
+            return "Disabled"
+        }
+
+        if occurrence.scheduleCategoryEnabled == false {
+            switch occurrence.action.type {
+            case .show:
+                return "Show Actions Off"
+
+            case .utility:
+                return "Utility Actions Off"
+            }
+        }
+
+        if occurrence.isPast {
+            return "Past"
+        }
+
+        return "Enabled"
+    }
+
+    private var eventStatusColor: Color {
+        if occurrence.event.enabled == false || occurrence.scheduleCategoryEnabled == false {
+            return .orange
+        }
+
+        return occurrence.isPast ? .secondary : .secondary
+    }
+
+    private var repeatSummary: String {
+        guard occurrence.event.repeatsDaily else {
+            return "One time"
+        }
+
+        let selectedWeekdays = occurrence.event.repeatWeekdays.isEmpty
+            ? Set(1...7)
+            : occurrence.event.repeatWeekdays
+
+        let baseText: String
+
+        if selectedWeekdays == Set(1...7) {
+            baseText = "Every day"
+        } else if selectedWeekdays == Set([2, 3, 4, 5, 6]) {
+            baseText = "Weekdays"
+        } else if selectedWeekdays == Set([1, 7]) {
+            baseText = "Weekends"
+        } else {
+            baseText = selectedWeekdays
+                .sorted()
+                .map { shortWeekdayName(for: $0) }
+                .joined(separator: ", ")
+        }
+
+        if let repeatUntil = occurrence.event.repeatUntil {
+            return "\(baseText), until \(Self.shortDateFormatter.string(from: repeatUntil))"
+        }
+
+        return baseText
+    }
+
+    private func statusPill(
+        title: String,
+        color: Color
+    ) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(color.opacity(0.14))
+            )
+    }
+
+    private func timeText(for date: Date) -> String {
+        let formatter = use24HourTime ? Self.time24Formatter : Self.time12Formatter
+        return formatter.string(from: date)
+    }
+
+    private func shortWeekdayName(for weekday: Int) -> String {
+        switch weekday {
+        case 1: return "Sun"
+        case 2: return "Mon"
+        case 3: return "Tue"
+        case 4: return "Wed"
+        case 5: return "Thu"
+        case 6: return "Fri"
+        case 7: return "Sat"
+        default: return "?"
+        }
+    }
+
+    private static let time24Formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let time12Formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm:ss a"
+        return formatter
+    }()
+
+    private static let shortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
+}
+
 // MARK: - Compact Event Chip
 
 private struct CompactScheduleEventChip: View {
@@ -974,6 +1507,10 @@ private struct CompactScheduleEventChip: View {
 
             if occurrence.isNext {
                 compactPill(title: "Next", color: .blue)
+            } else if occurrence.event.enabled == false {
+                compactPill(title: "Disabled", color: .orange)
+            } else if occurrence.scheduleCategoryEnabled == false {
+                compactPill(title: "Off", color: .orange)
             } else {
                 compactPill(title: occurrence.action.type.rawValue, color: actionColor)
             }
@@ -984,7 +1521,7 @@ private struct CompactScheduleEventChip: View {
         .background(chipBackground)
         .overlay(chipBorder)
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .opacity(occurrence.event.enabled ? 1.0 : 0.55)
+        .opacity(occurrence.isEffectivelyScheduled ? 1.0 : 0.55)
         .help(helpText)
         .onTapGesture(count: 2) {
             editAction()
@@ -1028,7 +1565,7 @@ private struct CompactScheduleEventChip: View {
 
     private var chipBackground: some View {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(actionColor.opacity(occurrence.isPast ? 0.08 : 0.18))
+            .fill(actionColor.opacity(occurrence.isEffectivelyScheduled ? (occurrence.isPast ? 0.08 : 0.18) : 0.06))
     }
 
     private var chipBorder: some View {
@@ -1056,10 +1593,21 @@ private struct CompactScheduleEventChip: View {
     }
 
     private func timeText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = use24HourTime ? "HH:mm:ss" : "h:mm a"
+        let formatter = use24HourTime ? Self.time24Formatter : Self.time12Formatter
         return formatter.string(from: date)
     }
+
+    private static let time24Formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let time12Formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
 }
 
 // MARK: - Month Day Cell
@@ -1068,6 +1616,8 @@ private struct MonthDayCell: View {
     let calendarDay: MonthCalendarDay
     let showCount: Int
     let utilityCount: Int
+    let showActionsEnabled: Bool
+    let utilityActionsEnabled: Bool
     let isCurrentMonth: Bool
     let isToday: Bool
 
@@ -1099,7 +1649,7 @@ private struct MonthDayCell: View {
                     count: showCount,
                     singular: "Show Event",
                     plural: "Show Events",
-                    color: .blue
+                    color: showActionsEnabled ? .blue : .orange
                 )
             }
 
@@ -1108,7 +1658,7 @@ private struct MonthDayCell: View {
                     count: utilityCount,
                     singular: "Utility Event",
                     plural: "Utility Events",
-                    color: .purple
+                    color: utilityActionsEnabled ? .purple : .orange
                 )
             }
 
@@ -1123,9 +1673,7 @@ private struct MonthDayCell: View {
     }
 
     private var dayNumberText: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d"
-        return formatter.string(from: calendarDay.date)
+        Self.dayNumberFormatter.string(from: calendarDay.date)
     }
 
     private func countPill(
@@ -1145,6 +1693,12 @@ private struct MonthDayCell: View {
                     .fill(color.opacity(0.14))
             )
     }
+
+    private static let dayNumberFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter
+    }()
 }
 
 // MARK: - Edit Sheet
@@ -1452,7 +2006,17 @@ private struct ScheduleEventEditSheet: View {
 
 // MARK: - Models
 
-private enum ScheduleViewMode: String, CaseIterable, Identifiable {
+private enum SchedulePresentationMode: String, CaseIterable, Identifiable {
+    case calendar = "Calendar View"
+    case list = "List View"
+
+    var id: String {
+        rawValue
+    }
+}
+
+private enum ScheduleRangeMode: String, CaseIterable, Identifiable {
+    case day = "Day"
     case week = "Week"
     case month = "Month"
 
@@ -1466,10 +2030,24 @@ private struct ScheduleOccurrence: Identifiable {
     let action: ActionDefinition
     let occurrenceDate: Date
     let isPast: Bool
+    let scheduleCategoryEnabled: Bool
     var isNext: Bool
+
+    var isEffectivelyScheduled: Bool {
+        event.enabled && scheduleCategoryEnabled
+    }
 
     var id: String {
         "\(event.id.uuidString)-\(Int(occurrenceDate.timeIntervalSince1970))"
+    }
+}
+
+private struct ScheduleListDayGroup: Identifiable {
+    let date: Date
+    let occurrences: [ScheduleOccurrence]
+
+    var id: TimeInterval {
+        Calendar.current.startOfDay(for: date).timeIntervalSince1970
     }
 }
 
