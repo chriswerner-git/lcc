@@ -160,6 +160,12 @@ struct Launch_Control_CenterApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+
+            // Remove the standard macOS Quit command from the app menu.
+            // Launch Control Center is intended to remain running as a
+            // menu-bar-first scheduler, so the operator-facing quit path lives
+            // only in MenuBarView.
+            CommandGroup(replacing: .appTermination) { }
         }
     }
 
@@ -241,4 +247,5 @@ struct Launch_Control_CenterApp: App {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
+
 
