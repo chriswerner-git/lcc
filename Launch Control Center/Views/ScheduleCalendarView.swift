@@ -37,7 +37,7 @@ struct ScheduleCalendarView: View {
     )
     @State private var visibleMonthDate: Date = Date()
 
-    @State private var editingOccurrence: ScheduleOccurrence?
+    @State private var editingRequest: ScheduleEditRequest?
     @State private var deletingOccurrence: ScheduleOccurrence?
     @State private var filteredSeriesID: UUID?
 
@@ -145,9 +145,12 @@ struct ScheduleCalendarView: View {
                 startingOn: newValue
             )
         }
-        .sheet(item: $editingOccurrence) { occurrence in
-            ScheduleEventEditSheet(occurrence: occurrence)
-                .environmentObject(appState)
+        .sheet(item: $editingRequest) { request in
+            ScheduleEventEditSheet(
+                occurrence: request.occurrence,
+                initialScope: request.initialScope
+            )
+            .environmentObject(appState)
         }
         .confirmationDialog(
             "Delete Event",
@@ -576,8 +579,11 @@ struct ScheduleCalendarView: View {
                             runAction: {
                                 appState.runAction(occurrence.action)
                             },
-                            editAction: {
-                                editingOccurrence = occurrence
+                            editAction: { scope in
+                                editingRequest = ScheduleEditRequest(
+                                    occurrence: occurrence,
+                                    initialScope: scope
+                                )
                             },
                             deleteAction: {
                                 deletingOccurrence = occurrence
@@ -607,8 +613,11 @@ struct ScheduleCalendarView: View {
                         runAction: { occurrence in
                             appState.runAction(occurrence.action)
                         },
-                        editAction: { occurrence in
-                            editingOccurrence = occurrence
+                        editAction: { occurrence, scope in
+                            editingRequest = ScheduleEditRequest(
+                                occurrence: occurrence,
+                                initialScope: scope
+                            )
                         },
                         deleteAction: { occurrence in
                             deletingOccurrence = occurrence
@@ -1196,7 +1205,7 @@ private struct ScheduleListDaySection: View {
     let group: ScheduleListDayGroup
     let use24HourTime: Bool
     let runAction: (ScheduleOccurrence) -> Void
-    let editAction: (ScheduleOccurrence) -> Void
+    let editAction: (ScheduleOccurrence, ScheduleEditScope) -> Void
     let deleteAction: (ScheduleOccurrence) -> Void
     let showSeriesAction: (ScheduleOccurrence) -> Void
 
@@ -1245,8 +1254,8 @@ private struct ScheduleListDaySection: View {
                             runAction: {
                                 runAction(occurrence)
                             },
-                            editAction: {
-                                editAction(occurrence)
+                            editAction: { scope in
+                                editAction(occurrence, scope)
                             },
                             deleteAction: {
                                 deleteAction(occurrence)
@@ -1310,7 +1319,7 @@ private struct ScheduleListOccurrenceRow: View {
     let occurrence: ScheduleOccurrence
     let use24HourTime: Bool
     let runAction: () -> Void
-    let editAction: () -> Void
+    let editAction: (ScheduleEditScope) -> Void
     let deleteAction: () -> Void
     let showSeriesAction: () -> Void
 
@@ -1392,7 +1401,7 @@ private struct ScheduleListOccurrenceRow: View {
         .opacity(occurrence.isEffectivelyScheduled ? 1.0 : 0.58)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
-            editAction()
+            editAction(occurrence.event.repeatsDaily ? .thisOccurrence : .entireSeries)
         }
         .contextMenu {
             Button {
@@ -1401,17 +1410,29 @@ private struct ScheduleListOccurrenceRow: View {
                 Label("Run Event Action", systemImage: "play.fill")
             }
 
-            Button {
-                editAction()
-            } label: {
-                Label("Edit Event", systemImage: "pencil")
-            }
-
             if occurrence.event.repeatsDaily {
+                Button {
+                    editAction(.thisOccurrence)
+                } label: {
+                    Label("Edit This Occurrence", systemImage: "pencil.and.scribble")
+                }
+
+                Button {
+                    editAction(.entireSeries)
+                } label: {
+                    Label("Edit Entire Series", systemImage: "rectangle.stack.badge.pencil")
+                }
+
                 Button {
                     showSeriesAction()
                 } label: {
                     Label("Show Only This Series", systemImage: "line.3.horizontal.decrease.circle")
+                }
+            } else {
+                Button {
+                    editAction(.entireSeries)
+                } label: {
+                    Label("Edit Event", systemImage: "pencil")
                 }
             }
 
@@ -1590,7 +1611,7 @@ private struct CompactScheduleEventChip: View {
     let occurrence: ScheduleOccurrence
     let use24HourTime: Bool
     let runAction: () -> Void
-    let editAction: () -> Void
+    let editAction: (ScheduleEditScope) -> Void
     let deleteAction: () -> Void
     let showSeriesAction: () -> Void
 
@@ -1642,7 +1663,7 @@ private struct CompactScheduleEventChip: View {
         .opacity(occurrence.isEffectivelyScheduled ? 1.0 : 0.55)
         .help(helpText)
         .onTapGesture(count: 2) {
-            editAction()
+            editAction(occurrence.event.repeatsDaily ? .thisOccurrence : .entireSeries)
         }
         .contextMenu {
             Button {
@@ -1651,17 +1672,29 @@ private struct CompactScheduleEventChip: View {
                 Label("Run Event Action", systemImage: "play.fill")
             }
 
-            Button {
-                editAction()
-            } label: {
-                Label("Edit Event", systemImage: "pencil")
-            }
-
             if occurrence.event.repeatsDaily {
+                Button {
+                    editAction(.thisOccurrence)
+                } label: {
+                    Label("Edit This Occurrence", systemImage: "pencil.and.scribble")
+                }
+
+                Button {
+                    editAction(.entireSeries)
+                } label: {
+                    Label("Edit Entire Series", systemImage: "rectangle.stack.badge.pencil")
+                }
+
                 Button {
                     showSeriesAction()
                 } label: {
                     Label("Show Only This Series", systemImage: "line.3.horizontal.decrease.circle")
+                }
+            } else {
+                Button {
+                    editAction(.entireSeries)
+                } label: {
+                    Label("Edit Event", systemImage: "pencil")
                 }
             }
 
@@ -1937,7 +1970,10 @@ private struct ScheduleEventEditSheet: View {
     @State private var intervalEndTime: Date
     @State private var seriesName: String
 
-    init(occurrence: ScheduleOccurrence) {
+    init(
+        occurrence: ScheduleOccurrence,
+        initialScope: ScheduleEditScope? = nil
+    ) {
         self.occurrence = occurrence
 
         let initialDate = occurrence.event.repeatsDaily ? occurrence.occurrenceDate : occurrence.event.startDate
@@ -1958,7 +1994,9 @@ private struct ScheduleEventEditSheet: View {
                 : occurrence.event.repeatWeekdays
         )
         _repeatUntil = State(initialValue: occurrence.event.repeatUntil ?? occurrence.occurrenceDate)
-        _editScope = State(initialValue: occurrence.event.repeatsDaily ? .thisOccurrence : .entireSeries)
+        _editScope = State(
+            initialValue: initialScope ?? (occurrence.event.repeatsDaily ? .thisOccurrence : .entireSeries)
+        )
         _repeatMode = State(initialValue: occurrence.event.repeatMode)
         _intervalMinutes = State(initialValue: occurrence.event.intervalMinutes ?? 10)
         _intervalEndTime = State(initialValue: occurrence.event.intervalEndTime ?? Self.defaultIntervalEndTime(from: occurrence.event.startDate))
@@ -2256,6 +2294,14 @@ private struct ScheduleEventEditSheet: View {
             return false
         }
 
+        // Editing a single generated occurrence detaches it into a standalone Event.
+        // Recurring-series validation such as repeat weekdays and interval end time
+        // should not block this save, because those fields are not being saved to
+        // the new standalone Event.
+        if occurrence.event.repeatsDaily && editScope == .thisOccurrence {
+            return true
+        }
+
         if repeatsDaily && repeatWeekdays.isEmpty {
             return false
         }
@@ -2450,6 +2496,12 @@ private enum ScheduleRangeMode: String, CaseIterable, Identifiable {
     var id: String {
         rawValue
     }
+}
+
+private struct ScheduleEditRequest: Identifiable {
+    let id = UUID()
+    let occurrence: ScheduleOccurrence
+    let initialScope: ScheduleEditScope
 }
 
 private struct ScheduleOccurrence: Identifiable {
