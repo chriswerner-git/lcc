@@ -1529,7 +1529,10 @@ final class AppState: ObservableObject {
         eventID: UUID,
         occurrenceDate: Date
     ) -> String {
-        "\(eventID.uuidString)-\(Int(occurrenceDate.timeIntervalSince1970))"
+        ScheduleEntryFormatter.occurrenceKey(
+            eventID: eventID,
+            occurrenceDate: occurrenceDate
+        )
     }
 
     private func scheduleDisabledMessage(for action: ActionDefinition) -> String {
@@ -1591,87 +1594,11 @@ final class AppState: ObservableObject {
         _ event: ScheduleEntry,
         now: Date
     ) -> Date? {
-        if event.repeatsDaily {
-            return dailyOccurrenceDate(for: event, now: now)
-        }
-
-        return event.startDate
-    }
-
-    private func dailyOccurrenceDate(
-        for event: ScheduleEntry,
-        now: Date
-    ) -> Date? {
-        let calendar = Calendar.current
-
-        let todayStart = calendar.startOfDay(for: now)
-        let eventStartDay = calendar.startOfDay(for: event.startDate)
-
-        guard todayStart >= eventStartDay else {
-            return nil
-        }
-
-        if let repeatUntil = event.repeatUntil {
-            let repeatUntilDay = calendar.startOfDay(for: repeatUntil)
-
-            guard todayStart <= repeatUntilDay else {
-                return nil
-            }
-        }
-
-        let todayWeekday = calendar.component(.weekday, from: now)
-        let selectedWeekdays = selectedWeekdaysForScheduling(event)
-
-        guard selectedWeekdays.contains(todayWeekday) else {
-            return nil
-        }
-
-        guard eventIsNotExcluded(event, on: now) else {
-            return nil
-        }
-
-        let todayComponents = calendar.dateComponents(
-            [.year, .month, .day],
-            from: now
+        ScheduleEntryFormatter.occurrenceDateForScheduleProcessing(
+            for: event,
+            now: now
         )
-
-        let timeComponents = calendar.dateComponents(
-            [.hour, .minute, .second],
-            from: event.startDate
-        )
-
-        var occurrenceComponents = DateComponents()
-        occurrenceComponents.year = todayComponents.year
-        occurrenceComponents.month = todayComponents.month
-        occurrenceComponents.day = todayComponents.day
-        occurrenceComponents.hour = timeComponents.hour
-        occurrenceComponents.minute = timeComponents.minute
-        occurrenceComponents.second = timeComponents.second
-
-        return calendar.date(from: occurrenceComponents)
     }
-
-    private func selectedWeekdaysForScheduling(_ event: ScheduleEntry) -> Set<Int> {
-        ScheduleEntryFormatter.selectedWeekdays(for: event)
-    }
-
-    private func eventIsNotExcluded(
-        _ event: ScheduleEntry,
-        on date: Date
-    ) -> Bool {
-        let calendar = Calendar.current
-
-        return event.excludedOccurrenceDates.contains { excludedDate in
-            calendar.isDate(excludedDate, inSameDayAs: date)
-        } == false
-    }
-
-    private static let processedOccurrenceDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
 
     private static let eventTimestamp24HourFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -1691,15 +1618,10 @@ final class AppState: ObservableObject {
         event: ScheduleEntry,
         occurrenceDate: Date
     ) -> String {
-        let dateKey: String
-
-        if event.repeatsDaily {
-            dateKey = AppState.processedOccurrenceDateFormatter.string(from: occurrenceDate)
-        } else {
-            dateKey = String(Int(event.startDate.timeIntervalSince1970))
-        }
-
-        return "\(event.id.uuidString)-\(dateKey)"
+        ScheduleEntryFormatter.occurrenceKey(
+            eventID: event.id,
+            occurrenceDate: occurrenceDate
+        )
     }
 
     private func resetProcessedOccurrencesIfNeeded(now: Date) {
@@ -1956,4 +1878,5 @@ private enum ActionRunSource {
     case scheduled
     case automated
 }
+
 

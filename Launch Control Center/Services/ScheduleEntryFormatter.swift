@@ -5,7 +5,8 @@
 //  └─────────────────────────────────────────────────────────────┘
 //
 //  File: ScheduleEntryFormatter.swift
-//  Purpose: Shared operator-facing formatting helpers for scheduled Events.
+//  Purpose: Shared operator-facing formatting and occurrence helpers for
+//           scheduled Events.
 //
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
@@ -31,7 +32,15 @@ enum ScheduleEntryFormatter {
             return oneTimeText
         }
 
-        let baseText = weekdaySummary(for: event)
+        let baseText: String
+
+        switch event.repeatMode {
+        case .oncePerSelectedDay:
+            baseText = weekdaySummary(for: event)
+
+        case .intervalDuringDay:
+            baseText = intervalRepeatSummary(for: event)
+        }
 
         guard includeRepeatUntil, let repeatUntil = event.repeatUntil else {
             return baseText
@@ -58,6 +67,29 @@ enum ScheduleEntryFormatter {
         }
 
         return weekdayNames(for: weekdays).joined(separator: ", ")
+    }
+
+    private static func intervalRepeatSummary(for event: ScheduleEntry) -> String {
+        let dayText = weekdaySummary(for: event)
+        let intervalText: String
+
+        if let intervalMinutes = event.intervalMinutes, intervalMinutes > 0 {
+            if intervalMinutes == 60 {
+                intervalText = "hourly"
+            } else if intervalMinutes % 60 == 0 {
+                intervalText = "every \(intervalMinutes / 60) hours"
+            } else {
+                intervalText = "every \(intervalMinutes) minutes"
+            }
+        } else {
+            intervalText = "at interval"
+        }
+
+        guard let intervalEndTime = event.intervalEndTime else {
+            return "\(dayText), \(intervalText)"
+        }
+
+        return "\(dayText), \(intervalText) until \(timeFormatter.string(from: intervalEndTime))"
     }
 
     // MARK: - Weekday Helpers
@@ -100,12 +132,295 @@ enum ScheduleEntryFormatter {
         }
     }
 
+    // MARK: - Occurrence Generation
+
+    /// Generates all occurrences for one calendar day.
+    ///
+    /// Existing Events continue to generate exactly one occurrence per eligible
+    /// day. Interval support is present for the upcoming editor pass and remains
+    /// same-day only; an invalid or midnight-crossing interval generates no
+    /// occurrences instead of guessing operator intent.
+    static func occurrenceDates(
+        for event: ScheduleEntry,
+        on day: Date,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        let dayStart = calendar.startOfDay(for: day)
+
+        if event.repeatsDaily == false {
+            guard calendar.isDate(event.startDate, inSameDayAs: day) else {
+                return []
+            }
+
+            guard occurrenceIsNotExcluded(
+                event,
+                occurrenceDate: event.startDate,
+                calendar: calendar
+            ) else {
+                return []
+            }
+
+            return [event.startDate]
+        }
+
+        guard eventCanOccur(on: dayStart, event: event, calendar: calendar) else {
+            return []
+        }
+
+        switch event.repeatMode {
+        case .oncePerSelectedDay:
+            guard let occurrenceDate = date(
+                on: dayStart,
+                usingTimeFrom: event.startDate,
+                calendar: calendar
+            ) else {
+                return []
+            }
+
+            guard occurrenceIsNotExcluded(
+                event,
+                occurrenceDate: occurrenceDate,
+                calendar: calendar
+            ) else {
+                return []
+            }
+
+            return [occurrenceDate]
+
+        case .intervalDuringDay:
+            return intervalOccurrenceDates(
+                for: event,
+                on: dayStart,
+                calendar: calendar
+            )
+        }
+    }
+
+    static func generatedOccurrences(
+        for event: ScheduleEntry,
+        on day: Date,
+        calendar: Calendar = .current
+    ) -> [ScheduleEntryOccurrence] {
+        occurrenceDates(for: event, on: day, calendar: calendar).map { occurrenceDate in
+            ScheduleEntryOccurrence(
+                event: event,
+                occurrenceDate: occurrenceDate
+            )
+        }
+    }
+
+    static func nextOccurrenceDate(
+        for event: ScheduleEntry,
+        from now: Date,
+        maximumLookaheadDays: Int = 370,
+        calendar: Calendar = .current
+    ) -> Date? {
+        if event.repeatsDaily == false {
+            return event.startDate >= now ? event.startDate : nil
+        }
+
+        let today = calendar.startOfDay(for: now)
+        let eventStartDay = calendar.startOfDay(for: event.startDate)
+        let searchStartDay = max(today, eventStartDay)
+
+        for dayOffset in 0...maximumLookaheadDays {
+            guard let candidateDay = calendar.date(
+                byAdding: .day,
+                value: dayOffset,
+                to: searchStartDay
+            ) else {
+                continue
+            }
+
+            let futureOccurrences = occurrenceDates(
+                for: event,
+                on: candidateDay,
+                calendar: calendar
+            )
+            .filter { $0 >= now }
+            .sorted()
+
+            if let firstOccurrence = futureOccurrences.first {
+                return firstOccurrence
+            }
+        }
+
+        return nil
+    }
+
+    /// Returns the occurrence that should be evaluated by the 10 Hz scheduler
+    /// for the current tick. For interval repeats, this returns the most recent
+    /// occurrence at or before `now`, allowing AppState's existing fire-tolerance
+    /// check and occurrence guard to decide whether it should actually run.
+    static func occurrenceDateForScheduleProcessing(
+        for event: ScheduleEntry,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> Date? {
+        let todayOccurrences = occurrenceDates(
+            for: event,
+            on: now,
+            calendar: calendar
+        )
+        .sorted()
+
+        guard todayOccurrences.isEmpty == false else {
+            return nil
+        }
+
+        return todayOccurrences.last { $0 <= now } ?? todayOccurrences.first
+    }
+
+    static func occurrenceKey(
+        eventID: UUID,
+        occurrenceDate: Date
+    ) -> String {
+        "\(eventID.uuidString)-\(Int(occurrenceDate.timeIntervalSince1970))"
+    }
+
+    private static func eventCanOccur(
+        on dayStart: Date,
+        event: ScheduleEntry,
+        calendar: Calendar
+    ) -> Bool {
+        let eventStartDay = calendar.startOfDay(for: event.startDate)
+
+        guard dayStart >= eventStartDay else {
+            return false
+        }
+
+        if let repeatUntil = event.repeatUntil {
+            let repeatUntilDay = calendar.startOfDay(for: repeatUntil)
+
+            guard dayStart <= repeatUntilDay else {
+                return false
+            }
+        }
+
+        if let seriesEndDate = event.seriesEndDate {
+            let seriesEndDay = calendar.startOfDay(for: seriesEndDate)
+
+            guard dayStart <= seriesEndDay else {
+                return false
+            }
+        }
+
+        let weekday = calendar.component(.weekday, from: dayStart)
+        return selectedWeekdays(for: event).contains(weekday)
+    }
+
+    private static func intervalOccurrenceDates(
+        for event: ScheduleEntry,
+        on dayStart: Date,
+        calendar: Calendar
+    ) -> [Date] {
+        guard let intervalMinutes = event.intervalMinutes,
+              intervalMinutes > 0,
+              let intervalEndTime = event.intervalEndTime,
+              let firstOccurrence = date(
+                on: dayStart,
+                usingTimeFrom: event.startDate,
+                calendar: calendar
+              ),
+              let finalOccurrenceBoundary = date(
+                on: dayStart,
+                usingTimeFrom: intervalEndTime,
+                calendar: calendar
+              ) else {
+            return []
+        }
+
+        // Same-day interval repeats intentionally may not cross midnight in v1.
+        guard finalOccurrenceBoundary >= firstOccurrence else {
+            return []
+        }
+
+        var occurrenceDates: [Date] = []
+        var candidate = firstOccurrence
+        var guardCount = 0
+
+        while candidate <= finalOccurrenceBoundary, guardCount < 1_440 {
+            if occurrenceIsNotExcluded(
+                event,
+                occurrenceDate: candidate,
+                calendar: calendar
+            ) {
+                occurrenceDates.append(candidate)
+            }
+
+            guard let nextCandidate = calendar.date(
+                byAdding: .minute,
+                value: intervalMinutes,
+                to: candidate
+            ) else {
+                break
+            }
+
+            candidate = nextCandidate
+            guardCount += 1
+        }
+
+        return occurrenceDates
+    }
+
+    private static func occurrenceIsNotExcluded(
+        _ event: ScheduleEntry,
+        occurrenceDate: Date,
+        calendar: Calendar
+    ) -> Bool {
+        let exactKey = occurrenceKey(
+            eventID: event.id,
+            occurrenceDate: occurrenceDate
+        )
+
+        guard event.excludedOccurrenceKeys.contains(exactKey) == false else {
+            return false
+        }
+
+        return event.excludedOccurrenceDates.contains { excludedDate in
+            calendar.isDate(excludedDate, inSameDayAs: occurrenceDate)
+        } == false
+    }
+
+    static func date(
+        on day: Date,
+        usingTimeFrom timeSource: Date,
+        calendar: Calendar = .current
+    ) -> Date? {
+        let dayComponents = calendar.dateComponents(
+            [.year, .month, .day],
+            from: day
+        )
+
+        let timeComponents = calendar.dateComponents(
+            [.hour, .minute, .second],
+            from: timeSource
+        )
+
+        var components = DateComponents()
+        components.year = dayComponents.year
+        components.month = dayComponents.month
+        components.day = dayComponents.day
+        components.hour = timeComponents.hour
+        components.minute = timeComponents.minute
+        components.second = timeComponents.second
+
+        return calendar.date(from: components)
+    }
+
     // MARK: - Date Formatting
 
     private static let shortDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .none
+        return formatter
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
         return formatter
     }()
 }

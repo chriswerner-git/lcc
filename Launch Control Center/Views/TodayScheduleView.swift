@@ -70,7 +70,7 @@ struct TodayScheduleView: View {
     private func eventList(
         items: [TodayScheduleItem],
         now: Date,
-        nextEventID: UUID?
+        nextEventID: String?
     ) -> some View {
         ScrollViewReader { scrollProxy in
             ScrollView(.vertical) {
@@ -137,7 +137,7 @@ struct TodayScheduleView: View {
     // MARK: - Scrolling
 
     private func scrollToNextEvent(
-        _ eventID: UUID?,
+        _ eventID: String?,
         using scrollProxy: ScrollViewProxy,
         animated: Bool
     ) {
@@ -161,18 +161,17 @@ struct TodayScheduleView: View {
     private func todaysScheduleItems(referenceDate: Date) -> [TodayScheduleItem] {
         appState.scheduleEntries
             .filter { $0.enabled }
-            .compactMap { event in
-                guard eventIsToday(event, referenceDate: referenceDate) else {
-                    return nil
-                }
-
-                return TodayScheduleItem(
-                    event: event,
-                    occurrenceDate: occurrenceDateToday(
-                        for: event,
-                        referenceDate: referenceDate
-                    )
+            .flatMap { event -> [TodayScheduleItem] in
+                ScheduleEntryFormatter.occurrenceDates(
+                    for: event,
+                    on: referenceDate
                 )
+                .map { occurrenceDate in
+                    TodayScheduleItem(
+                        event: event,
+                        occurrenceDate: occurrenceDate
+                    )
+                }
             }
             .sorted { $0.occurrenceDate < $1.occurrenceDate }
     }
@@ -180,76 +179,8 @@ struct TodayScheduleView: View {
     private func nextUpcomingEventID(
         now: Date,
         items: [TodayScheduleItem]
-    ) -> UUID? {
+    ) -> String? {
         items.first { $0.occurrenceDate >= now }?.id
-    }
-
-    private func eventIsToday(
-        _ event: ScheduleEntry,
-        referenceDate: Date
-    ) -> Bool {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: referenceDate)
-
-        let isExcluded = event.excludedOccurrenceDates.contains { excludedDate in
-            calendar.isDate(excludedDate, inSameDayAs: today)
-        }
-
-        guard isExcluded == false else {
-            return false
-        }
-
-        if event.repeatsDaily == false {
-            return calendar.isDate(event.startDate, inSameDayAs: referenceDate)
-        }
-
-        let eventStartDay = calendar.startOfDay(for: event.startDate)
-
-        guard today >= eventStartDay else {
-            return false
-        }
-
-        if let repeatUntil = event.repeatUntil {
-            let repeatUntilDay = calendar.startOfDay(for: repeatUntil)
-
-            guard today <= repeatUntilDay else {
-                return false
-            }
-        }
-
-        let todayWeekday = calendar.component(.weekday, from: today)
-        return selectedWeekdays(for: event).contains(todayWeekday)
-    }
-
-    private func occurrenceDateToday(
-        for event: ScheduleEntry,
-        referenceDate: Date
-    ) -> Date {
-        let calendar = Calendar.current
-
-        guard event.repeatsDaily else {
-            return event.startDate
-        }
-
-        let todayComponents = calendar.dateComponents(
-            [.year, .month, .day],
-            from: referenceDate
-        )
-
-        let timeComponents = calendar.dateComponents(
-            [.hour, .minute, .second],
-            from: event.startDate
-        )
-
-        var components = DateComponents()
-        components.year = todayComponents.year
-        components.month = todayComponents.month
-        components.day = todayComponents.day
-        components.hour = timeComponents.hour
-        components.minute = timeComponents.minute
-        components.second = timeComponents.second
-
-        return calendar.date(from: components) ?? event.startDate
     }
 
     private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
@@ -276,8 +207,11 @@ private struct TodayScheduleItem: Identifiable {
     let event: ScheduleEntry
     let occurrenceDate: Date
 
-    var id: UUID {
-        event.id
+    var id: String {
+        ScheduleEntryFormatter.occurrenceKey(
+            eventID: event.id,
+            occurrenceDate: occurrenceDate
+        )
     }
 }
 
@@ -465,4 +399,5 @@ struct ScheduleEntryRow: View {
     }
 
 }
+
 

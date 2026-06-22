@@ -621,7 +621,7 @@ private final class DashboardNextEventCache {
                 continue
             }
 
-            guard let occurrenceDate = DashboardScheduleOccurrenceResolver.nextOccurrenceDate(
+            guard let occurrenceDate = ScheduleEntryFormatter.nextOccurrenceDate(
                 for: event,
                 from: now
             ) else {
@@ -690,20 +690,39 @@ private final class DashboardNextEventCache {
                         .sorted()
                         .joined(separator: ",")
 
+                    let exactExclusions = event.excludedOccurrenceKeys
+                        .sorted()
+                        .joined(separator: ",")
+
                     let repeatUntil = event.repeatUntil.map {
+                        String($0.timeIntervalSinceReferenceDate)
+                    } ?? "nil"
+
+                    let intervalEndTime = event.intervalEndTime.map {
+                        String($0.timeIntervalSinceReferenceDate)
+                    } ?? "nil"
+
+                    let seriesEndDate = event.seriesEndDate.map {
                         String($0.timeIntervalSinceReferenceDate)
                     } ?? "nil"
 
                     return [
                         "event",
                         event.id.uuidString,
+                        event.seriesID?.uuidString ?? "nil",
+                        event.seriesName ?? "",
                         event.actionDefinitionID.uuidString,
                         String(event.startDate.timeIntervalSinceReferenceDate),
                         String(event.enabled),
                         String(event.repeatsDaily),
+                        event.repeatMode.rawValue,
+                        event.intervalMinutes.map(String.init) ?? "nil",
+                        intervalEndTime,
+                        seriesEndDate,
                         weekdays,
                         repeatUntil,
-                        exclusions
+                        exclusions,
+                        exactExclusions
                     ].joined(separator: ":")
                 }
         )
@@ -862,4 +881,5 @@ private var dashboardCardBorder: some View {
     RoundedRectangle(cornerRadius: 16, style: .continuous)
         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
 }
+
 

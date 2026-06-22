@@ -747,39 +747,39 @@ struct ScheduleCalendarView: View {
         let now = Date()
         let nextID = nextOccurrenceID(now: now)
 
-        let occurrences = appState.scheduleEntries.compactMap { event -> ScheduleOccurrence? in
-            guard eventOccurs(on: day, event: event) else {
-                return nil
-            }
+        let occurrences = appState.scheduleEntries.flatMap { event -> [ScheduleOccurrence] in
+            let occurrenceDates = ScheduleEntryFormatter.occurrenceDates(
+                for: event,
+                on: day
+            )
 
-            guard let occurrenceDate = occurrenceDate(
-                on: day,
-                usingTimeFrom: event.startDate
-            ) else {
-                return nil
+            guard occurrenceDates.isEmpty == false else {
+                return []
             }
 
             guard let action = appState.actionDefinitions.first(where: {
                 $0.id == event.actionDefinitionID
             }) else {
-                return nil
+                return []
             }
 
-            var occurrence = ScheduleOccurrence(
-                event: event,
-                action: action,
-                occurrenceDate: occurrenceDate,
-                isPast: occurrenceDate < now,
-                scheduleCategoryEnabled: scheduleCategoryIsEnabled(for: action),
-                executionRecord: appState.scheduleExecutionRecord(
-                    for: event.id,
-                    occurrenceDate: occurrenceDate
-                ),
-                isNext: false
-            )
+            return occurrenceDates.map { occurrenceDate in
+                var occurrence = ScheduleOccurrence(
+                    event: event,
+                    action: action,
+                    occurrenceDate: occurrenceDate,
+                    isPast: occurrenceDate < now,
+                    scheduleCategoryEnabled: scheduleCategoryIsEnabled(for: action),
+                    executionRecord: appState.scheduleExecutionRecord(
+                        for: event.id,
+                        occurrenceDate: occurrenceDate
+                    ),
+                    isNext: false
+                )
 
-            occurrence.isNext = occurrence.id == nextID
-            return occurrence
+                occurrence.isNext = occurrence.id == nextID
+                return occurrence
+            }
         }
 
         return occurrences.sorted {
@@ -824,44 +824,44 @@ struct ScheduleCalendarView: View {
 
     private func nextOccurrenceID(now: Date) -> String? {
         let occurrences = visibleCalendarDays.flatMap { day in
-            appState.scheduleEntries.compactMap { event -> ScheduleOccurrence? in
+            appState.scheduleEntries.flatMap { event -> [ScheduleOccurrence] in
                 guard event.enabled else {
-                    return nil
+                    return []
                 }
 
-                guard eventOccurs(on: day, event: event) else {
-                    return nil
-                }
+                let occurrenceDates = ScheduleEntryFormatter.occurrenceDates(
+                    for: event,
+                    on: day
+                )
 
-                guard let occurrenceDate = occurrenceDate(
-                    on: day,
-                    usingTimeFrom: event.startDate
-                ) else {
-                    return nil
+                guard occurrenceDates.isEmpty == false else {
+                    return []
                 }
 
                 guard let action = appState.actionDefinitions.first(where: {
                     $0.id == event.actionDefinitionID
                 }) else {
-                    return nil
+                    return []
                 }
 
                 guard scheduleCategoryIsEnabled(for: action) else {
-                    return nil
+                    return []
                 }
 
-                return ScheduleOccurrence(
-                    event: event,
-                    action: action,
-                    occurrenceDate: occurrenceDate,
-                    isPast: occurrenceDate < now,
-                    scheduleCategoryEnabled: true,
-                    executionRecord: appState.scheduleExecutionRecord(
-                        for: event.id,
-                        occurrenceDate: occurrenceDate
-                    ),
-                    isNext: false
-                )
+                return occurrenceDates.map { occurrenceDate in
+                    ScheduleOccurrence(
+                        event: event,
+                        action: action,
+                        occurrenceDate: occurrenceDate,
+                        isPast: occurrenceDate < now,
+                        scheduleCategoryEnabled: true,
+                        executionRecord: appState.scheduleExecutionRecord(
+                            for: event.id,
+                            occurrenceDate: occurrenceDate
+                        ),
+                        isNext: false
+                    )
+                }
             }
         }
 
@@ -872,47 +872,6 @@ struct ScheduleCalendarView: View {
             .id
     }
 
-    private func eventOccurs(
-        on day: Date,
-        event: ScheduleEntry
-    ) -> Bool {
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: day)
-
-        let isExcluded = event.excludedOccurrenceDates.contains { excludedDate in
-            calendar.isDate(excludedDate, inSameDayAs: day)
-        }
-
-        guard isExcluded == false else {
-            return false
-        }
-
-        if event.repeatsDaily == false {
-            return calendar.isDate(event.startDate, inSameDayAs: day)
-        }
-
-        let eventStartDay = calendar.startOfDay(for: event.startDate)
-
-        guard dayStart >= eventStartDay else {
-            return false
-        }
-
-        if let repeatUntil = event.repeatUntil {
-            let repeatUntilDay = calendar.startOfDay(for: repeatUntil)
-
-            guard dayStart <= repeatUntilDay else {
-                return false
-            }
-        }
-
-        let weekday = calendar.component(.weekday, from: day)
-        return selectedWeekdays(for: event).contains(weekday)
-    }
-
-    private func selectedWeekdays(for event: ScheduleEntry) -> Set<Int> {
-        ScheduleEntryFormatter.selectedWeekdays(for: event)
-    }
-
     private func scheduleCategoryIsEnabled(for action: ActionDefinition) -> Bool {
         switch action.type {
         case .show:
@@ -921,33 +880,6 @@ struct ScheduleCalendarView: View {
         case .utility:
             return appState.utilityActionsEnabled
         }
-    }
-
-    private func occurrenceDate(
-        on day: Date,
-        usingTimeFrom timeSource: Date
-    ) -> Date? {
-        let calendar = Calendar.current
-
-        let dayComponents = calendar.dateComponents(
-            [.year, .month, .day],
-            from: day
-        )
-
-        let timeComponents = calendar.dateComponents(
-            [.hour, .minute, .second],
-            from: timeSource
-        )
-
-        var components = DateComponents()
-        components.year = dayComponents.year
-        components.month = dayComponents.month
-        components.day = dayComponents.day
-        components.hour = timeComponents.hour
-        components.minute = timeComponents.minute
-        components.second = timeComponents.second
-
-        return calendar.date(from: components)
     }
 
     // MARK: - Navigation / Formatting
@@ -2114,7 +2046,10 @@ private struct ScheduleOccurrence: Identifiable {
     }
 
     var id: String {
-        "\(event.id.uuidString)-\(Int(occurrenceDate.timeIntervalSince1970))"
+        ScheduleEntryFormatter.occurrenceKey(
+            eventID: event.id,
+            occurrenceDate: occurrenceDate
+        )
     }
 }
 
@@ -2176,4 +2111,5 @@ private enum WeekdayEditOption: Int, CaseIterable, Identifiable {
         }
     }
 }
+
 
