@@ -24,6 +24,7 @@ struct SetupView: View {
     @State private var selectedCategory: SetupCategory = .appPreferences
     @State private var configurationStatus: String = "No configuration import/export yet."
     @State private var resetStatus: String = "No reset actions have been performed."
+    @State private var networkInterfaces: [NetworkInterfaceSnapshot] = NetworkInventoryService.currentIPv4Interfaces()
 
     // MARK: - Body
 
@@ -50,6 +51,7 @@ struct SetupView: View {
         .onAppear {
             appState.refreshLaunchAtStartupStatus()
             appState.refreshSleepPreventionStatus()
+            refreshNetworkInterfaces()
         }
     }
 
@@ -172,6 +174,9 @@ struct SetupView: View {
                     switch selectedCategory {
                     case .appPreferences:
                         appPreferencesCard
+
+                    case .network:
+                        networkInventoryCard
 
                     case .projectPreferences:
                         projectPreferencesCard
@@ -436,6 +441,168 @@ struct SetupView: View {
         .padding(12)
         .background(insetPanelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: - Network Inventory
+
+    private var networkInventoryCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeader(
+                title: "Network Inventory",
+                subtitle: "Read-only snapshot of local IPv4 interfaces."
+            )
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "network")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(LCCDesign.ColorToken.active)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Current Local IPv4 Interfaces")
+                        .font(.subheadline)
+                        .bold()
+
+                    Text("This panel reports available local IPv4 addresses only. It does not bind UDP sends, change routing, open ports, or change listener behavior.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    refreshNetworkInterfaces()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(12)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if networkInterfaces.isEmpty {
+                emptyNetworkInventoryView
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(networkInterfaces) { interface in
+                        networkInterfaceRow(interface)
+                    }
+                }
+            }
+
+            setupDivider
+
+            Text("Future network-health features may use this inventory for per-message source hints, broadcast support, and listener-interface selection. Automatic macOS routing remains unchanged in this pass.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 2)
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var emptyNetworkInventoryView: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(LCCDesign.ColorToken.warning)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("No IPv4 interfaces found")
+                    .font(.subheadline)
+                    .bold()
+
+                Text("Refresh after connecting a network adapter or assigning an IPv4 address.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(12)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func networkInterfaceRow(_ interface: NetworkInterfaceSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: interface.availabilitySystemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(networkAvailabilityColor(for: interface))
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(interface.displayName)
+                        .font(.subheadline)
+                        .bold()
+
+                    Text(interface.availabilityText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text(interface.ipv4Address)
+                    .font(.system(.body, design: .monospaced))
+                    .monospacedDigit()
+                    .textSelection(.enabled)
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                networkInterfaceDetail(label: "Netmask", value: interface.netmask ?? "—")
+                networkInterfaceDetail(label: "Broadcast", value: interface.broadcastAddress ?? "—")
+                networkInterfaceDetail(label: "Broadcast Capable", value: interface.supportsBroadcastText)
+            }
+        }
+        .padding(12)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func networkInterfaceDetail(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .monospacedDigit()
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func networkAvailabilityColor(for interface: NetworkInterfaceSnapshot) -> Color {
+        if interface.isLoopback {
+            return LCCDesign.ColorToken.active
+        }
+
+        if interface.isUp && interface.isRunning {
+            return LCCDesign.ColorToken.success
+        }
+
+        if interface.isUp {
+            return LCCDesign.ColorToken.warning
+        }
+
+        return LCCDesign.ColorToken.error
+    }
+
+    private func refreshNetworkInterfaces() {
+        networkInterfaces = NetworkInventoryService.currentIPv4Interfaces()
     }
 
     // MARK: - Project Preferences
@@ -1188,6 +1355,7 @@ struct SetupView: View {
 
 private enum SetupCategory: String, CaseIterable, Identifiable {
     case appPreferences
+    case network
     case projectPreferences
     case importExport
     case resetDefaults
@@ -1200,6 +1368,9 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
         switch self {
         case .appPreferences:
             return "App"
+
+        case .network:
+            return "Network"
 
         case .projectPreferences:
             return "Project"
@@ -1217,6 +1388,9 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
         case .appPreferences:
             return "App Preferences"
 
+        case .network:
+            return "Network"
+
         case .projectPreferences:
             return "Project Preferences"
 
@@ -1233,6 +1407,9 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
         case .appPreferences:
             return "macwindow"
 
+        case .network:
+            return "network"
+
         case .projectPreferences:
             return "slider.horizontal.3"
 
@@ -1248,6 +1425,9 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
         switch self {
         case .appPreferences:
             return "Application behavior and display preferences."
+
+        case .network:
+            return "Read-only local IPv4 interface inventory."
 
         case .projectPreferences:
             return "Project identity, notes, playback presets, and UDP output."
