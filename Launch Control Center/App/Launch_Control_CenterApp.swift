@@ -295,7 +295,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private func activateApp() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        LCCWindowActivation.activateApplication()
     }
 }
 

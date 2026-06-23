@@ -218,6 +218,18 @@ private struct ManualActionButtonsView: View {
 
             Spacer()
 
+            if appState.runningActionCount > 0 {
+                Button {
+                    appState.cancelRunningActions()
+                } label: {
+                    Label("Cancel Running", systemImage: "xmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Cancel currently running Actions")
+            }
+
             Text("\(appState.actionDefinitions.count) total")
                 .font(.caption)
                 .foregroundStyle(.secondary)

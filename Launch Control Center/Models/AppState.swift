@@ -246,6 +246,7 @@ struct ConfigurationImportResult {
 enum ConfigurationImportError: LocalizedError {
     case actionsRunning(count: Int)
     case invalidSelection(String)
+    case backupFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -255,6 +256,9 @@ enum ConfigurationImportError: LocalizedError {
 
         case .invalidSelection(let message):
             return message
+
+        case .backupFailed(let message):
+            return "Import blocked because an automatic backup could not be created. \(message)"
         }
     }
 }
@@ -264,12 +268,16 @@ enum ConfigurationImportError: LocalizedError {
 
 enum AppResetError: LocalizedError {
     case actionsRunning(count: Int)
+    case backupFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .actionsRunning(let count):
             let actionText = count == 1 ? "Action is" : "Actions are"
             return "Reset blocked because \(count) \(actionText) currently running. Wait for all Actions to finish before resetting stored data."
+
+        case .backupFailed(let message):
+            return "Reset blocked because an automatic backup could not be created. \(message)"
         }
     }
 }
@@ -300,6 +308,9 @@ final class AppState: ObservableObject {
 
     // Tracks Actions currently executing so the same Action cannot overlap itself.
     private var runningActionIDs: Set<UUID> = []
+    private var runningActionTasks: [UUID: Task<Void, Never>] = [:]
+
+    @Published private(set) var runningActionCount: Int = 0
 
     // Allows grouped preference updates to produce one final volume output message
     // instead of a burst of intermediate UDP messages.
@@ -1000,6 +1011,12 @@ final class AppState: ObservableObject {
 
         try validateConfigurationImport(options: options)
         try ensureNoActionsRunningForImport()
+        do {
+            try createAutomaticConfigurationBackup(reason: "pre-import")
+        } catch {
+            logger.error("Automatic pre-import backup failed: \(error.localizedDescription)")
+            throw ConfigurationImportError.backupFailed(error.localizedDescription)
+        }
 
         let reportLines = try applyConfiguration(
             configuration,
@@ -1067,6 +1084,98 @@ final class AppState: ObservableObject {
             scheduleEntries: scheduleEntries
         )
     }
+
+    private func createAutomaticConfigurationBackup(reason: String) throws {
+        let backupDirectory = try configurationBackupDirectory()
+        let timestamp = AppState.configurationBackupTimestampFormatter.string(from: Date())
+        let project = sanitizedConfigurationBackupName(projectName)
+        let safeReason = sanitizedConfigurationBackupName(reason)
+        let fileURL = backupDirectory.appendingPathComponent(
+            "\(timestamp)_\(project)_\(safeReason).launchcontrol"
+        )
+
+        let configuration = currentConfigurationSnapshot()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [
+            .prettyPrinted,
+            .sortedKeys,
+            .withoutEscapingSlashes
+        ]
+        encoder.dateEncodingStrategy = .iso8601
+
+        let data = try encoder.encode(configuration)
+        try data.write(to: fileURL, options: [.atomic])
+
+        try pruneConfigurationBackups(in: backupDirectory, keepingNewest: 5)
+        logger.info("Created automatic configuration backup: \(fileURL.lastPathComponent)")
+    }
+
+    private func configurationBackupDirectory() throws -> URL {
+        let applicationSupportDirectory = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+
+        let backupDirectory = applicationSupportDirectory
+            .appendingPathComponent("Launch Control Center", isDirectory: true)
+            .appendingPathComponent("Backups", isDirectory: true)
+
+        try FileManager.default.createDirectory(
+            at: backupDirectory,
+            withIntermediateDirectories: true
+        )
+
+        return backupDirectory
+    }
+
+    private func pruneConfigurationBackups(
+        in backupDirectory: URL,
+        keepingNewest limit: Int
+    ) throws {
+        let backupFiles = try FileManager.default.contentsOfDirectory(
+            at: backupDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension == "launchcontrol" }
+        .sorted { lhs, rhs in
+            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return lhsDate > rhsDate
+        }
+
+        guard backupFiles.count > limit else {
+            return
+        }
+
+        for backupFile in backupFiles.dropFirst(limit) {
+            try FileManager.default.removeItem(at: backupFile)
+        }
+    }
+
+    private func sanitizedConfigurationBackupName(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let collapsed = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .unicodeScalars
+            .map { allowed.contains($0) ? String($0) : "_" }
+            .joined()
+
+        let name = collapsed
+            .replacingOccurrences(of: "__+", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+
+        return name.isEmpty ? "Untitled_Project" : name
+    }
+
+    private static let configurationBackupTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return formatter
+    }()
 
     private func decodeConfiguration(from url: URL) throws -> LaunchControlConfiguration {
         let data = try Data(contentsOf: url)
@@ -1658,6 +1767,12 @@ final class AppState: ObservableObject {
 
     func restoreDefaultAppPreferences() throws {
         try ensureNoActionsRunningForReset()
+        do {
+            try createAutomaticConfigurationBackup(reason: "restore-default-app-preferences")
+        } catch {
+            logger.error("Automatic reset backup failed: \(error.localizedDescription)")
+            throw AppResetError.backupFailed(error.localizedDescription)
+        }
 
         use24HourTime = true
         weekStartDay = 1
@@ -1678,6 +1793,12 @@ final class AppState: ObservableObject {
 
     func restoreDefaultProjectPreferences() throws {
         try ensureNoActionsRunningForReset()
+        do {
+            try createAutomaticConfigurationBackup(reason: "restore-default-project-preferences")
+        } catch {
+            logger.error("Automatic reset backup failed: \(error.localizedDescription)")
+            throw AppResetError.backupFailed(error.localizedDescription)
+        }
 
         projectName = "Untitled Project"
         projectNotes = ""
@@ -1715,6 +1836,12 @@ final class AppState: ObservableObject {
 
     func deleteAllEvents() throws {
         try ensureNoActionsRunningForReset()
+        do {
+            try createAutomaticConfigurationBackup(reason: "delete-all-events")
+        } catch {
+            logger.error("Automatic reset backup failed: \(error.localizedDescription)")
+            throw AppResetError.backupFailed(error.localizedDescription)
+        }
 
         deleteEventsAndScheduleHistory()
 
@@ -1725,6 +1852,12 @@ final class AppState: ObservableObject {
 
     func deleteAllActionsAndEvents() throws {
         try ensureNoActionsRunningForReset()
+        do {
+            try createAutomaticConfigurationBackup(reason: "delete-all-actions-and-events")
+        } catch {
+            logger.error("Automatic reset backup failed: \(error.localizedDescription)")
+            throw AppResetError.backupFailed(error.localizedDescription)
+        }
 
         actionDefinitions = []
         PersistenceService.shared.deleteActionDefinitions()
@@ -1783,21 +1916,79 @@ final class AppState: ObservableObject {
 
     // MARK: - Action Execution
 
+    @MainActor
     func runAction(_ action: ActionDefinition) {
-        runAction(action, source: .manual)
+        startTrackedActionTask(
+            action,
+            source: .manual,
+            visitedActionIDs: Set([action.id])
+        )
     }
 
+    @MainActor
     private func runAction(
         _ action: ActionDefinition,
         source: ActionRunSource
     ) {
-        Task { [weak self] in
-            await self?.executeAction(
+        startTrackedActionTask(
+            action,
+            source: source,
+            visitedActionIDs: Set([action.id])
+        )
+    }
+
+    @MainActor
+    private func startTrackedActionTask(
+        _ action: ActionDefinition,
+        source: ActionRunSource,
+        visitedActionIDs: Set<UUID>,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        guard runningActionIDs.contains(action.id) == false,
+              runningActionTasks[action.id] == nil else {
+            updateDuplicateActionMessage(action, source: source)
+            completion?(false)
+            return
+        }
+
+        let task = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            let completed = await self.executeAction(
                 action,
                 source: source,
-                visitedActionIDs: Set([action.id])
+                visitedActionIDs: visitedActionIDs
             )
+
+            await MainActor.run {
+                self.runningActionTasks[action.id] = nil
+                self.updateRunningActionCount()
+                completion?(completed)
+            }
         }
+
+        runningActionTasks[action.id] = task
+        updateRunningActionCount()
+    }
+
+    @MainActor
+    func cancelRunningActions() {
+        let cancelCount = max(runningActionCount, runningActionTasks.count)
+
+        guard cancelCount > 0 else {
+            lastMessage = "No running Actions to cancel"
+            logger.info(lastMessage)
+            return
+        }
+
+        for task in runningActionTasks.values {
+            task.cancel()
+        }
+
+        lastMessage = "Cancel requested for \(cancelCount) running Action\(cancelCount == 1 ? "" : "s")"
+        logger.warning(lastMessage)
     }
 
     @MainActor
@@ -1878,33 +2069,48 @@ final class AppState: ObservableObject {
         source: ActionRunSource
     ) -> Bool {
         guard runningActionIDs.contains(action.id) == false else {
-            switch source {
-            case .manual:
-                lastMessage = "Action already running: \(action.name)"
-
-            case .scheduled:
-                lastMessage = "Skipped scheduled Action already running: \(action.name)"
-
-            case .automated:
-                lastMessage = "Skipped Automated Action already running: \(action.name)"
-            }
-
-            logger.warning(lastMessage)
+            updateDuplicateActionMessage(action, source: source)
             return false
         }
 
         runningActionIDs.insert(action.id)
+        updateRunningActionCount()
         return true
     }
 
     @MainActor
     private func finishActionRun(_ action: ActionDefinition) {
         runningActionIDs.remove(action.id)
+        updateRunningActionCount()
 
         if runningActionIDs.isEmpty,
            controlStatus == .sending {
             controlStatus = .idle
         }
+    }
+
+    @MainActor
+    private func updateRunningActionCount() {
+        runningActionCount = runningActionIDs.count
+    }
+
+    @MainActor
+    private func updateDuplicateActionMessage(
+        _ action: ActionDefinition,
+        source: ActionRunSource
+    ) {
+        switch source {
+        case .manual:
+            lastMessage = "Action already running: \(action.name)"
+
+        case .scheduled:
+            lastMessage = "Skipped scheduled Action already running: \(action.name)"
+
+        case .automated:
+            lastMessage = "Skipped Automated Action already running: \(action.name)"
+        }
+
+        logger.warning(lastMessage)
     }
 
     @MainActor
@@ -1930,6 +2136,17 @@ final class AppState: ObservableObject {
     }
 
     @MainActor
+    private func actionCancellationAllowsContinue(actionName: String) -> Bool {
+        guard Task.isCancelled == false else {
+            lastMessage = "Action cancelled: \(actionName)"
+            logger.warning(lastMessage)
+            return false
+        }
+
+        return true
+    }
+
+    @MainActor
     private func executeShowAction(
         _ action: ActionDefinition,
         actionStartDate: Date
@@ -1940,7 +2157,15 @@ final class AppState: ObservableObject {
             return false
         }
 
+        guard actionCancellationAllowsContinue(actionName: action.name) else {
+            return false
+        }
+
         for command in action.commands {
+            guard actionCancellationAllowsContinue(actionName: action.name) else {
+                return false
+            }
+
             guard actionRuntimeIsAvailable(
                 actionName: action.name,
                 actionStartDate: actionStartDate
@@ -1955,6 +2180,10 @@ final class AppState: ObservableObject {
             )
 
             guard delayCompleted else {
+                return false
+            }
+
+            guard actionCancellationAllowsContinue(actionName: action.name) else {
                 return false
             }
 
@@ -1981,7 +2210,15 @@ final class AppState: ObservableObject {
             return false
         }
 
+        guard actionCancellationAllowsContinue(actionName: action.name) else {
+            return false
+        }
+
         for command in action.utilityCommands {
+            guard actionCancellationAllowsContinue(actionName: action.name) else {
+                return false
+            }
+
             guard actionRuntimeIsAvailable(
                 actionName: action.name,
                 actionStartDate: actionStartDate
@@ -1996,6 +2233,10 @@ final class AppState: ObservableObject {
             )
 
             guard delayCompleted else {
+                return false
+            }
+
+            guard actionCancellationAllowsContinue(actionName: action.name) else {
                 return false
             }
 
@@ -2025,6 +2266,10 @@ final class AppState: ObservableObject {
             actionName: parentAction.name,
             actionStartDate: actionStartDate
         ) else {
+            return false
+        }
+
+        guard actionCancellationAllowsContinue(actionName: parentAction.name) else {
             return false
         }
 
@@ -2102,6 +2347,10 @@ final class AppState: ObservableObject {
             return false
         }
 
+        guard actionCancellationAllowsContinue(actionName: parentAction.name) else {
+            return false
+        }
+
         var updatedVisitedActionIDs = visitedActionIDs
         updatedVisitedActionIDs.insert(actionID)
 
@@ -2124,6 +2373,10 @@ final class AppState: ObservableObject {
         actionStartDate: Date
     ) async -> Bool {
         let delay = max(delaySeconds, 0)
+
+        guard actionCancellationAllowsContinue(actionName: actionName) else {
+            return false
+        }
 
         guard delay > 0 else {
             return actionRuntimeIsAvailable(
@@ -2167,6 +2420,50 @@ final class AppState: ObservableObject {
         )
     }
 
+    private func availableSourceIPAddresses() -> Set<String> {
+        Set(
+            NetworkInventoryService.currentIPv4Interfaces()
+                .filter { $0.isUp && $0.isRunning }
+                .map(\.ipv4Address)
+        )
+    }
+
+    @MainActor
+    private func resolvedUDPSource(
+        requestedSourceIPAddress: String,
+        unavailablePolicy: UDPSourceUnavailablePolicy,
+        stepName: String
+    ) -> (sourceIPAddress: String?, shouldSend: Bool) {
+        let requested = requestedSourceIPAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard requested.isEmpty == false else {
+            return (nil, true)
+        }
+
+        guard availableSourceIPAddresses().contains(requested) else {
+            let message = "Selected UDP source IP \(requested) is unavailable for Step: \(stepName)."
+
+            switch unavailablePolicy {
+            case .useAutomaticRouting:
+                logger.warning("\(message) Using Automatic Routing.")
+                lastMessage = "\(message) Using Automatic Routing."
+                return (nil, true)
+
+            case .doNotSend:
+                logger.error("\(message) UDP message not sent.")
+                lastMessage = "\(message) UDP message not sent."
+                controlStatus = .error
+                return (nil, false)
+            }
+        }
+
+        return (requested, true)
+    }
+
+    private func payloadExceedsRecommendedUDPSize(_ payload: String) -> Bool {
+        payload.utf8.count > UDPPayloadValidation.warningByteLimit
+    }
+
     func runSingleCommand(_ command: UDPCommand) {
         guard sendMessageCommand(command) else {
             controlStatus = .error
@@ -2199,15 +2496,29 @@ final class AppState: ObservableObject {
             )
         }
 
+        if payloadExceedsRecommendedUDPSize(payload) {
+            logger.warning("UDP payload for Step \"\(command.name)\" is \(payload.utf8.count) bytes. Payloads over \(UDPPayloadValidation.warningByteLimit) bytes may fragment or drop.")
+        }
+
+        let resolvedSource = resolvedUDPSource(
+            requestedSourceIPAddress: command.sourceIPAddress,
+            unavailablePolicy: command.sourceUnavailablePolicy,
+            stepName: command.name
+        )
+
+        guard resolvedSource.shouldSend else {
+            return false
+        }
+
         udpService.send(
             message: payload,
             host: command.host,
             port: UInt16(command.port),
-            sourceIPAddress: command.sourceIPAddress,
+            sourceIPAddress: resolvedSource.sourceIPAddress,
             allowsBroadcast: command.allowsBroadcast
         )
 
-        let sourceDescription = command.sourceIPAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "automatic source" : "source \(command.sourceIPAddress)"
+        let sourceDescription = resolvedSource.sourceIPAddress == nil ? "automatic source" : "source \(resolvedSource.sourceIPAddress ?? "")"
         let broadcastDescription = command.allowsBroadcast ? " broadcast" : ""
         logger.info("Sent \(command.messageType.rawValue) Step: \(command.name) to \(command.host):\(command.port) using \(sourceDescription)\(broadcastDescription)")
 
@@ -2224,11 +2535,25 @@ final class AppState: ObservableObject {
             return
         }
 
+        if payloadExceedsRecommendedUDPSize(command.udpMessage) {
+            logger.warning("UDP payload for Utility Step \"\(command.name)\" is \(command.udpMessage.utf8.count) bytes. Payloads over \(UDPPayloadValidation.warningByteLimit) bytes may fragment or drop.")
+        }
+
+        let resolvedSource = resolvedUDPSource(
+            requestedSourceIPAddress: command.udpSourceIPAddress,
+            unavailablePolicy: command.udpSourceUnavailablePolicy,
+            stepName: command.name
+        )
+
+        guard resolvedSource.shouldSend else {
+            return
+        }
+
         udpService.send(
             message: command.udpMessage,
             host: command.udpHost,
             port: UInt16(command.udpPort),
-            sourceIPAddress: command.udpSourceIPAddress,
+            sourceIPAddress: resolvedSource.sourceIPAddress,
             allowsBroadcast: command.udpAllowsBroadcast
         )
 
@@ -2457,19 +2782,13 @@ final class AppState: ObservableObject {
         action: ActionDefinition,
         occurrenceDate: Date
     ) {
-        Task { [weak self] in
-            guard let self else {
-                return
-            }
-
-            let completed = await self.executeAction(
+        Task { @MainActor [weak self] in
+            self?.startTrackedActionTask(
                 action,
                 source: .scheduled,
                 visitedActionIDs: Set([action.id])
-            )
-
-            await MainActor.run {
-                self.recordScheduleExecution(
+            ) { [weak self] completed in
+                self?.recordScheduleExecution(
                     event: event,
                     occurrenceDate: occurrenceDate,
                     result: completed ? .ran : .failed,

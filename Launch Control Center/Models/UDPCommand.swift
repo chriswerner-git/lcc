@@ -31,6 +31,29 @@ enum MessageStepType: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum UDPSourceUnavailablePolicy: String, CaseIterable, Codable, Identifiable {
+    case useAutomaticRouting = "Use Automatic Routing"
+    case doNotSend = "Do Not Send"
+
+    var id: String {
+        rawValue
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .useAutomaticRouting:
+            return "Use Automatic"
+
+        case .doNotSend:
+            return "Do Not Send"
+        }
+    }
+}
+
+enum UDPPayloadValidation {
+    static let warningByteLimit = 1_400
+}
+
 enum SyslogSeverity: String, CaseIterable, Codable, Identifiable {
     case emergency = "Emergency"
     case alert = "Alert"
@@ -101,6 +124,10 @@ struct UDPCommand: Identifiable, Codable {
     // to this local IPv4 address before sending.
     var sourceIPAddress: String = ""
 
+    // Controls what happens when sourceIPAddress is set but that local IPv4
+    // address is not currently available.
+    var sourceUnavailablePolicy: UDPSourceUnavailablePolicy = .useAutomaticRouting
+
     // Enables SO_BROADCAST for this step when sending to a subnet broadcast address.
     var allowsBroadcast: Bool = false
 
@@ -130,6 +157,7 @@ struct UDPCommand: Identifiable, Codable {
         host: String = "127.0.0.1",
         port: Int = 8001,
         sourceIPAddress: String = "",
+        sourceUnavailablePolicy: UDPSourceUnavailablePolicy = .useAutomaticRouting,
         allowsBroadcast: Bool = false,
         message: String = "",
         syslogSeverity: SyslogSeverity = .info,
@@ -141,6 +169,7 @@ struct UDPCommand: Identifiable, Codable {
         self.host = host
         self.port = port
         self.sourceIPAddress = sourceIPAddress
+        self.sourceUnavailablePolicy = sourceUnavailablePolicy
         self.allowsBroadcast = allowsBroadcast
         self.message = message
         self.syslogSeverity = syslogSeverity
@@ -156,6 +185,7 @@ struct UDPCommand: Identifiable, Codable {
         case host
         case port
         case sourceIPAddress
+        case sourceUnavailablePolicy
         case allowsBroadcast
         case message
         case syslogSeverity
@@ -171,6 +201,7 @@ struct UDPCommand: Identifiable, Codable {
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? "127.0.0.1"
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 8001
         sourceIPAddress = try container.decodeIfPresent(String.self, forKey: .sourceIPAddress) ?? ""
+        sourceUnavailablePolicy = try container.decodeIfPresent(UDPSourceUnavailablePolicy.self, forKey: .sourceUnavailablePolicy) ?? .useAutomaticRouting
         allowsBroadcast = try container.decodeIfPresent(Bool.self, forKey: .allowsBroadcast) ?? false
         message = try container.decodeIfPresent(String.self, forKey: .message) ?? ""
         syslogSeverity = try container.decodeIfPresent(SyslogSeverity.self, forKey: .syslogSeverity) ?? .info
@@ -186,6 +217,7 @@ struct UDPCommand: Identifiable, Codable {
         try container.encode(host, forKey: .host)
         try container.encode(port, forKey: .port)
         try container.encode(sourceIPAddress, forKey: .sourceIPAddress)
+        try container.encode(sourceUnavailablePolicy, forKey: .sourceUnavailablePolicy)
         try container.encode(allowsBroadcast, forKey: .allowsBroadcast)
         try container.encode(message, forKey: .message)
         try container.encode(syslogSeverity, forKey: .syslogSeverity)

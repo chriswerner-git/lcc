@@ -80,7 +80,7 @@ final class StartupStatusPanelController {
 
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        LCCWindowActivation.activateApplication()
 
         let dismissWorkItem = DispatchWorkItem { [weak self] in
             self?.dismiss()

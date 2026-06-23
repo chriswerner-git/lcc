@@ -12,6 +12,7 @@
 
 import AppKit
 import Foundation
+import OSLog
 
 final class OperationalLogService {
     // MARK: - Shared Instance
@@ -31,6 +32,10 @@ final class OperationalLogService {
     private let appSupportFolderName = "Launch Control Center"
     private let logsFolderName = "Logs"
     private let maxLogFileSizeBytes: UInt64 = 5 * 1024 * 1024
+    private let unifiedLogger = Logger(
+        subsystem: "com.lunartelephone.launchcontrolcenter",
+        category: "Operational"
+    )
 
     // MARK: - Private State
 
@@ -77,6 +82,11 @@ final class OperationalLogService {
         message: String
     ) {
         let date = Date()
+
+        writeToUnifiedLog(
+            level: level,
+            message: message
+        )
 
         queue.async { [weak self] in
             self?.writeSynchronously(
@@ -138,6 +148,26 @@ final class OperationalLogService {
         }
 
         return try purgeResult.get()
+    }
+
+    // MARK: - Unified Logging
+
+    private func writeToUnifiedLog(
+        level: Level,
+        message: String
+    ) {
+        let cleanMessage = sanitized(message)
+
+        switch level {
+        case .info:
+            unifiedLogger.info("\(cleanMessage, privacy: .public)")
+
+        case .warning:
+            unifiedLogger.warning("\(cleanMessage, privacy: .public)")
+
+        case .error:
+            unifiedLogger.error("\(cleanMessage, privacy: .public)")
+        }
     }
 
     // MARK: - Private Write

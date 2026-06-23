@@ -51,6 +51,7 @@ struct UtilityCommand: Identifiable, Codable {
     var udpHost: String = "127.0.0.1"
     var udpPort: Int = 8001
     var udpSourceIPAddress: String = ""
+    var udpSourceUnavailablePolicy: UDPSourceUnavailablePolicy = .useAutomaticRouting
     var udpAllowsBroadcast: Bool = false
     var udpMessage: String = ""
 
@@ -68,6 +69,7 @@ struct UtilityCommand: Identifiable, Codable {
         case udpHost
         case udpPort
         case udpSourceIPAddress
+        case udpSourceUnavailablePolicy
         case udpAllowsBroadcast
         case udpMessage
     }
@@ -84,6 +86,7 @@ struct UtilityCommand: Identifiable, Codable {
         udpHost: String = "127.0.0.1",
         udpPort: Int = 8001,
         udpSourceIPAddress: String = "",
+        udpSourceUnavailablePolicy: UDPSourceUnavailablePolicy = .useAutomaticRouting,
         udpAllowsBroadcast: Bool = false,
         udpMessage: String = ""
     ) {
@@ -98,6 +101,7 @@ struct UtilityCommand: Identifiable, Codable {
         self.udpHost = udpHost
         self.udpPort = udpPort
         self.udpSourceIPAddress = udpSourceIPAddress
+        self.udpSourceUnavailablePolicy = udpSourceUnavailablePolicy
         self.udpAllowsBroadcast = udpAllowsBroadcast
         self.udpMessage = udpMessage
     }
@@ -116,6 +120,7 @@ struct UtilityCommand: Identifiable, Codable {
         udpHost = try container.decodeIfPresent(String.self, forKey: .udpHost) ?? "127.0.0.1"
         udpPort = try container.decodeIfPresent(Int.self, forKey: .udpPort) ?? 8001
         udpSourceIPAddress = try container.decodeIfPresent(String.self, forKey: .udpSourceIPAddress) ?? ""
+        udpSourceUnavailablePolicy = try container.decodeIfPresent(UDPSourceUnavailablePolicy.self, forKey: .udpSourceUnavailablePolicy) ?? .useAutomaticRouting
         udpAllowsBroadcast = try container.decodeIfPresent(Bool.self, forKey: .udpAllowsBroadcast) ?? false
         udpMessage = try container.decodeIfPresent(String.self, forKey: .udpMessage) ?? ""
     }
@@ -134,6 +139,7 @@ struct UtilityCommand: Identifiable, Codable {
         try container.encode(udpHost, forKey: .udpHost)
         try container.encode(udpPort, forKey: .udpPort)
         try container.encode(udpSourceIPAddress, forKey: .udpSourceIPAddress)
+        try container.encode(udpSourceUnavailablePolicy, forKey: .udpSourceUnavailablePolicy)
         try container.encode(udpAllowsBroadcast, forKey: .udpAllowsBroadcast)
         try container.encode(udpMessage, forKey: .udpMessage)
     }

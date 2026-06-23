@@ -353,8 +353,11 @@ struct ActionEditorView: View {
 
             udpNetworkOptionsRow(
                 sourceIPAddress: command.sourceIPAddress,
+                sourceUnavailablePolicy: command.sourceUnavailablePolicy,
                 allowsBroadcast: command.allowsBroadcast
             )
+
+            messagePayloadWarning(for: command.wrappedValue)
         }
     }
 
@@ -386,8 +389,11 @@ struct ActionEditorView: View {
 
             udpNetworkOptionsRow(
                 sourceIPAddress: command.sourceIPAddress,
+                sourceUnavailablePolicy: command.sourceUnavailablePolicy,
                 allowsBroadcast: command.allowsBroadcast
             )
+
+            messagePayloadWarning(for: command.wrappedValue)
 
             syslogPreview(command: command.wrappedValue)
         }
@@ -395,23 +401,33 @@ struct ActionEditorView: View {
 
     private func udpNetworkOptionsRow(
         sourceIPAddress: Binding<String>,
+        sourceUnavailablePolicy: Binding<UDPSourceUnavailablePolicy>,
         allowsBroadcast: Binding<Bool>
     ) -> some View {
-        HStack(alignment: .bottom, spacing: LCCLayout.Actions.messageFieldSpacing) {
-            sourceIPAddressPicker(selection: sourceIPAddress)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .bottom, spacing: LCCLayout.Actions.messageFieldSpacing) {
+                sourceIPAddressPicker(selection: sourceIPAddress)
 
-            Button {
-                refreshNetworkInterfaces()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Button {
+                    refreshNetworkInterfaces()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+
+                Toggle("Broadcast", isOn: allowsBroadcast)
+                    .toggleStyle(.switch)
+                    .frame(width: 128, alignment: .leading)
+
+                sourceUnavailablePolicyPicker(selection: sourceUnavailablePolicy)
+
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.bordered)
 
-            Toggle("Broadcast", isOn: allowsBroadcast)
-                .toggleStyle(.switch)
-                .frame(width: 128, alignment: .leading)
-
-            Spacer(minLength: 0)
+            sourceAvailabilityWarning(
+                sourceIPAddress: sourceIPAddress.wrappedValue,
+                policy: sourceUnavailablePolicy.wrappedValue
+            )
         }
         .padding(.top, 2)
     }
@@ -439,6 +455,40 @@ struct ActionEditorView: View {
             }
             .labelsHidden()
             .frame(width: LCCLayout.Actions.sourcePickerWidth)
+        }
+    }
+
+    private func sourceUnavailablePolicyPicker(selection: Binding<UDPSourceUnavailablePolicy>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("If Unavailable")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("", selection: selection) {
+                ForEach(UDPSourceUnavailablePolicy.allCases) { policy in
+                    Text(policy.shortLabel).tag(policy)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 170)
+        }
+    }
+
+    @ViewBuilder
+    private func sourceAvailabilityWarning(
+        sourceIPAddress: String,
+        policy: UDPSourceUnavailablePolicy
+    ) -> some View {
+        let source = sourceIPAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if source.isEmpty == false,
+           networkInterfaces.contains(where: { $0.ipv4Address == source && $0.isUp && $0.isRunning }) == false {
+            validationNotice(
+                systemImage: policy == .doNotSend ? "xmark.octagon.fill" : "exclamationmark.triangle.fill",
+                message: policy == .doNotSend
+                    ? "Selected source IP \(source) is unavailable. This step will not send until the source returns or the setting is changed."
+                    : "Selected source IP \(source) is unavailable. This step will fall back to Automatic Routing."
+            )
         }
     }
 
@@ -480,6 +530,62 @@ struct ActionEditorView: View {
             .background(insetPanelBackground)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+    }
+
+    @ViewBuilder
+    private func messagePayloadWarning(for command: UDPCommand) -> some View {
+        let payload: String = {
+            switch command.messageType {
+            case .standardUDP:
+                return command.message
+
+            case .syslog:
+                return SyslogMessageFormatter.formattedMessage(
+                    severity: command.syslogSeverity,
+                    deviceName: appState.syslogDeviceName,
+                    message: command.message
+                )
+            }
+        }()
+
+        payloadWarningView(byteCount: payload.utf8.count)
+    }
+
+    @ViewBuilder
+    private func utilityPayloadWarning(for command: UtilityCommand) -> some View {
+        payloadWarningView(byteCount: command.udpMessage.utf8.count)
+    }
+
+    @ViewBuilder
+    private func payloadWarningView(byteCount: Int) -> some View {
+        if byteCount > UDPPayloadValidation.warningByteLimit {
+            validationNotice(
+                systemImage: "exclamationmark.triangle.fill",
+                message: "UDP payload is \(byteCount) bytes. Payloads over \(UDPPayloadValidation.warningByteLimit) bytes may fragment or be dropped on show networks."
+            )
+        }
+    }
+
+    private func validationNotice(
+        systemImage: String,
+        message: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(LCCDesign.ColorToken.warning)
+                .padding(.top, 1)
+
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(9)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Utility Steps
@@ -702,8 +808,11 @@ struct ActionEditorView: View {
 
             udpNetworkOptionsRow(
                 sourceIPAddress: command.udpSourceIPAddress,
+                sourceUnavailablePolicy: command.udpSourceUnavailablePolicy,
                 allowsBroadcast: command.udpAllowsBroadcast
             )
+
+            utilityPayloadWarning(for: command.wrappedValue)
         }
         .padding(12)
         .background(insetPanelBackground)

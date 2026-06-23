@@ -223,6 +223,8 @@ private struct TestingContentView: View {
                 .frame(maxWidth: .infinity)
             }
 
+            testPayloadWarning
+
             Button {
                 sendTestMessage()
             } label: {
@@ -240,6 +242,30 @@ private struct TestingContentView: View {
         .background(cardBackground)
         .overlay(cardBorder)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var testPayloadWarning: some View {
+        Group {
+            if testMessage.utf8.count > UDPPayloadValidation.warningByteLimit {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(LCCDesign.ColorToken.warning)
+                        .padding(.top, 1)
+
+                    Text("UDP payload is \(testMessage.utf8.count) bytes. Payloads over \(UDPPayloadValidation.warningByteLimit) bytes may fragment or be dropped on show networks.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(insetPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
     }
 
     // MARK: - Listener
@@ -530,6 +556,12 @@ private struct TestingContentView: View {
 
         refreshNetworkInterfaces()
 
+        if selectedListenIPAddress != Self.allInterfacesChoice,
+           selectableInterfaces.contains(where: { $0.ipv4Address == selectedListenIPAddress }) == false {
+            udpService.lastReceivedMessage = "Selected listen interface is unavailable: \(selectedListenIPAddress)"
+            return
+        }
+
         udpService.startListening(
             port: port,
             localIPAddress: selectedListenIPAddress == Self.allInterfacesChoice ? nil : selectedListenIPAddress
@@ -544,11 +576,21 @@ private struct TestingContentView: View {
 
         refreshNetworkInterfaces()
 
+        let sourceIPAddress: String?
+        if selectedSendSourceIPAddress == Self.automaticSourceChoice {
+            sourceIPAddress = nil
+        } else if selectableInterfaces.contains(where: { $0.ipv4Address == selectedSendSourceIPAddress }) {
+            sourceIPAddress = selectedSendSourceIPAddress
+        } else {
+            udpService.lastSendStatus = "Selected source IP \(selectedSendSourceIPAddress) is unavailable. Using Automatic Routing for this test send."
+            sourceIPAddress = nil
+        }
+
         udpService.send(
             message: testMessage,
             host: appState.defaultDestinationHost,
             port: port,
-            sourceIPAddress: selectedSendSourceIPAddress == Self.automaticSourceChoice ? nil : selectedSendSourceIPAddress,
+            sourceIPAddress: sourceIPAddress,
             allowsBroadcast: broadcastEnabled
         )
     }

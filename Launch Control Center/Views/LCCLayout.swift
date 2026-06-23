@@ -192,7 +192,7 @@ enum LCCLayout {
 
 enum LCCWindowActivation {
     static func bringWindowToFront(matchingTitle title: String) {
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        activateApplication()
 
         // SwiftUI may create or rehydrate the NSWindow shortly after openWindow()
         // returns, so make a few short attempts rather than assuming immediate
@@ -210,9 +210,13 @@ enum LCCWindowActivation {
 
                 window.makeKeyAndOrderFront(nil)
                 window.orderFrontRegardless()
-                NSApplication.shared.activate(ignoringOtherApps: true)
+                activateApplication()
             }
         }
+    }
+
+    static func activateApplication() {
+        NSApplication.shared.activate()
     }
 }
 
