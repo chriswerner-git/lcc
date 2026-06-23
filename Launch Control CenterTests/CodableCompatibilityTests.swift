@@ -1,11 +1,11 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                    │
-//  │  Launch Control Center                                      │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: CodableCompatibilityTests.swift
-//  Purpose: Verifies older saved command payloads decode with safe defaults.
+//  Purpose: Verifies legacy Codable payloads receive safe defaults.
 //
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
@@ -13,42 +13,47 @@
 import XCTest
 @testable import Launch_Control_Center
 
-@MainActor
 final class CodableCompatibilityTests: XCTestCase {
-    func testUDPCommandDecodesMissingNetworkOptionsWithSafeDefaults() throws {
-        let json = #"""
+    func testLegacyUDPCommandDecodesWithNetworkDefaults() throws {
+        let id = UUID()
+        let json = """
         {
-            "id": "11111111-1111-1111-1111-111111111111",
-            "messageType": "Standard UDP",
-            "name": "Legacy UDP Step",
-            "host": "127.0.0.1",
-            "port": 8001,
-            "message": "RUN_SHOW",
-            "delaySeconds": 0
+          "id": "\(id.uuidString)",
+          "messageType": "standardUDP",
+          "name": "Legacy Step",
+          "host": "127.0.0.1",
+          "port": 8001,
+          "message": "RUN_SHOW",
+          "syslogSeverity": "Info",
+          "delaySeconds": 0
         }
-        """#.data(using: .utf8)!
+        """
 
-        let command = try JSONDecoder().decode(UDPCommand.self, from: json)
+        let command = try JSONDecoder().decode(UDPCommand.self, from: Data(json.utf8))
 
         XCTAssertEqual(command.sourceIPAddress, "")
         XCTAssertEqual(command.sourceUnavailablePolicy, .useAutomaticRouting)
         XCTAssertFalse(command.allowsBroadcast)
     }
 
-    func testUtilityCommandDecodesMissingUDPNetworkOptionsWithSafeDefaults() throws {
-        let json = #"""
+    func testLegacyUtilityCommandDecodesWithNetworkDefaults() throws {
+        let id = UUID()
+        let json = """
         {
-            "id": "22222222-2222-2222-2222-222222222222",
-            "name": "Legacy Utility UDP Step",
-            "kind": "Send UDP",
-            "delaySeconds": 0,
-            "udpHost": "127.0.0.1",
-            "udpPort": 8001,
-            "udpMessage": "PING"
+          "id": "\(id.uuidString)",
+          "name": "Legacy Utility UDP",
+          "kind": "Send UDP",
+          "delaySeconds": 0,
+          "volumeLevel": 0.75,
+          "showScheduleEnabled": true,
+          "utilityScheduleEnabled": true,
+          "udpHost": "127.0.0.1",
+          "udpPort": 8001,
+          "udpMessage": "PING"
         }
-        """#.data(using: .utf8)!
+        """
 
-        let command = try JSONDecoder().decode(UtilityCommand.self, from: json)
+        let command = try JSONDecoder().decode(UtilityCommand.self, from: Data(json.utf8))
 
         XCTAssertEqual(command.udpSourceIPAddress, "")
         XCTAssertEqual(command.udpSourceUnavailablePolicy, .useAutomaticRouting)

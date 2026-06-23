@@ -471,6 +471,8 @@ private struct DashboardWindowConfigurator: NSViewRepresentable {
 private struct ConfigurationHealthDashboardView: View {
     @EnvironmentObject var appState: AppState
 
+    @State private var showsDetails = false
+
     private var report: ConfigurationHealthReport {
         appState.configurationHealthReport
     }
@@ -507,6 +509,17 @@ private struct ConfigurationHealthDashboardView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+
+            Button {
+                showsDetails.toggle()
+            } label: {
+                Label("Details", systemImage: "list.bullet.clipboard")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .popover(isPresented: $showsDetails, arrowEdge: .top) {
+                ConfigurationHealthDetailsPopover(report: report)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -532,3 +545,107 @@ private struct ConfigurationHealthDashboardView: View {
         }
     }
 }
+
+private struct ConfigurationHealthDetailsPopover: View {
+    let report: ConfigurationHealthReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: report.level.systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(healthColor)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Configuration Health")
+                        .font(.headline)
+
+                    Text(report.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+
+            Divider()
+
+            if report.issues.isEmpty {
+                Label("No configuration issues were found.", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
+            } else {
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(report.issues) { issue in
+                            ConfigurationHealthIssueRow(issue: issue)
+                        }
+                    }
+                    .padding(.trailing, 4)
+                }
+                .frame(maxHeight: 320)
+            }
+        }
+        .padding(16)
+        .frame(width: 420)
+    }
+
+    private var healthColor: Color {
+        switch report.level {
+        case .healthy:
+            return LCCDesign.ColorToken.active
+
+        case .warning:
+            return LCCDesign.ColorToken.warning
+
+        case .error:
+            return LCCDesign.ColorToken.error
+        }
+    }
+}
+
+private struct ConfigurationHealthIssueRow: View {
+    let issue: ConfigurationHealthIssue
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: issue.level.systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(issueColor)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(issue.title)
+                    .font(.subheadline.weight(.semibold))
+
+                Text(issue.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(
+            LCCDesign.cardBackground(
+                cornerRadius: LCCDesign.Radius.inset,
+                opacity: 0.45
+            )
+        )
+        .overlay(LCCDesign.cardBorder(cornerRadius: LCCDesign.Radius.inset))
+    }
+
+    private var issueColor: Color {
+        switch issue.level {
+        case .healthy:
+            return LCCDesign.ColorToken.active
+
+        case .warning:
+            return LCCDesign.ColorToken.warning
+
+        case .error:
+            return LCCDesign.ColorToken.error
+        }
+    }
+}
+

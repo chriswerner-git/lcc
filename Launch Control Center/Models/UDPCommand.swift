@@ -29,6 +29,30 @@ enum MessageStepType: String, CaseIterable, Codable, Identifiable {
             return "doc.text.fill"
         }
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+
+        switch value {
+        case "Standard UDP", "standardUDP", "udp", "UDP":
+            self = .standardUDP
+
+        case "Syslog", "syslog":
+            self = .syslog
+
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Cannot initialize MessageStepType from invalid String value \(value)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 enum UDPSourceUnavailablePolicy: String, CaseIterable, Codable, Identifiable {

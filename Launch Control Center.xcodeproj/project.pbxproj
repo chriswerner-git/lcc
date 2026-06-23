@@ -17,8 +17,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		D1C000012FE900000023F75C /* Launch Control CenterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Launch Control CenterTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C489483A2FE6F6070023F75C /* Launch Control Center.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Launch Control Center.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1C000012FE900000023F75C /* Launch Control CenterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Launch Control CenterTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -32,11 +32,6 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		D1C000022FE900000023F75C /* Launch Control CenterTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Launch Control CenterTests";
-			sourceTree = "<group>";
-		};
 		C489483C2FE6F6070023F75C /* Launch Control Center */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -45,17 +40,22 @@
 			path = "Launch Control Center";
 			sourceTree = "<group>";
 		};
+		D1C000022FE900000023F75C /* Launch Control CenterTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Launch Control CenterTests";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		D1C000032FE900000023F75C /* Frameworks */ = {
+		C48948372FE6F6070023F75C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C48948372FE6F6070023F75C /* Frameworks */ = {
+		D1C000032FE900000023F75C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -86,6 +86,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		C48948392FE6F6070023F75C /* Launch Control Center */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C48948452FE6F6080023F75C /* Build configuration list for PBXNativeTarget "Launch Control Center" */;
+			buildPhases = (
+				C48948362FE6F6070023F75C /* Sources */,
+				C48948372FE6F6070023F75C /* Frameworks */,
+				C48948382FE6F6070023F75C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C489483C2FE6F6070023F75C /* Launch Control Center */,
+			);
+			name = "Launch Control Center";
+			packageProductDependencies = (
+			);
+			productName = "Launch Control Center";
+			productReference = C489483A2FE6F6070023F75C /* Launch Control Center.app */;
+			productType = "com.apple.product-type.application";
+		};
 		D1C000062FE900000023F75C /* Launch Control CenterTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D1C0000B2FE900000023F75C /* Build configuration list for PBXNativeTarget "Launch Control CenterTests" */;
@@ -109,28 +131,6 @@
 			productReference = D1C000012FE900000023F75C /* Launch Control CenterTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		C48948392FE6F6070023F75C /* Launch Control Center */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = C48948452FE6F6080023F75C /* Build configuration list for PBXNativeTarget "Launch Control Center" */;
-			buildPhases = (
-				C48948362FE6F6070023F75C /* Sources */,
-				C48948372FE6F6070023F75C /* Frameworks */,
-				C48948382FE6F6070023F75C /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				C489483C2FE6F6070023F75C /* Launch Control Center */,
-			);
-			name = "Launch Control Center";
-			packageProductDependencies = (
-			);
-			productName = "Launch Control Center";
-			productReference = C489483A2FE6F6070023F75C /* Launch Control Center.app */;
-			productType = "com.apple.product-type.application";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -141,12 +141,12 @@
 				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					C48948392FE6F6070023F75C = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					D1C000062FE900000023F75C = {
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = C48948392FE6F6070023F75C;
-					};
-					C48948392FE6F6070023F75C = {
-						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -171,14 +171,14 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		D1C000042FE900000023F75C /* Resources */ = {
+		C48948382FE6F6070023F75C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C48948382FE6F6070023F75C /* Resources */ = {
+		D1C000042FE900000023F75C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -188,14 +188,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		D1C000052FE900000023F75C /* Sources */ = {
+		C48948362FE6F6070023F75C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C48948362FE6F6070023F75C /* Sources */ = {
+		D1C000052FE900000023F75C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -213,48 +213,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		D1C000092FE900000023F75C /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9989B36G52;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@loader_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				PRODUCT_BUNDLE_IDENTIFIER = com.lunartelephone.launchcontrolcenterTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Launch Control Center.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Launch Control Center";
-			};
-			name = Debug;
-		};
-		D1C0000A2FE900000023F75C /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9989B36G52;
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@loader_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				PRODUCT_BUNDLE_IDENTIFIER = com.lunartelephone.launchcontrolcenterTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Launch Control Center.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Launch Control Center";
-			};
-			name = Release;
-		};
 		C48948432FE6F6080023F75C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -492,18 +450,51 @@
 			};
 			name = Release;
 		};
+		D1C000092FE900000023F75C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9989B36G52;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lunartelephone.launchcontrolcenterTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Launch Control Center.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Launch Control Center";
+			};
+			name = Debug;
+		};
+		D1C0000A2FE900000023F75C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9989B36G52;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lunartelephone.launchcontrolcenterTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Launch Control Center.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Launch Control Center";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		D1C0000B2FE900000023F75C /* Build configuration list for PBXNativeTarget "Launch Control CenterTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				D1C000092FE900000023F75C /* Debug */,
-				D1C0000A2FE900000023F75C /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		C48948352FE6F6070023F75C /* Build configuration list for PBXProject "Launch Control Center" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -518,6 +509,15 @@
 			buildConfigurations = (
 				C48948462FE6F6080023F75C /* Debug */,
 				C48948472FE6F6080023F75C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D1C0000B2FE900000023F75C /* Build configuration list for PBXNativeTarget "Launch Control CenterTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1C000092FE900000023F75C /* Debug */,
+				D1C0000A2FE900000023F75C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
