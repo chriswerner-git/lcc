@@ -35,13 +35,13 @@ struct ContentView: View {
                 DashboardClockView()
                     .environmentObject(appState)
 
+                ConfigurationHealthDashboardView()
+                    .environmentObject(appState)
+
                 ManualActionButtonsView()
                     .environmentObject(appState)
 
                 ScheduleStatusView()
-                    .environmentObject(appState)
-
-                ConfigurationHealthDashboardView()
                     .environmentObject(appState)
 
                 dashboardDivider

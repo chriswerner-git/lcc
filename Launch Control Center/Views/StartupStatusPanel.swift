@@ -304,7 +304,7 @@ private struct StartupStatusPanelView: View {
     private var configurationHealthColor: Color {
         switch appState.configurationHealthReport.level {
         case .healthy:
-            return LCCDesign.ColorToken.active
+            return LCCDesign.ColorToken.success
 
         case .warning:
             return LCCDesign.ColorToken.warning
