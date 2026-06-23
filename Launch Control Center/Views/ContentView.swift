@@ -48,15 +48,21 @@ struct ContentView: View {
 
                 dashboardDivider
 
-                EventSummaryView()
-                    .environmentObject(appState)
-                    .frame(height: 124)
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: sectionSpacing) {
+                        EventSummaryView()
+                            .environmentObject(appState)
+                            .frame(height: LCCLayout.Dashboard.eventSummaryHeight)
 
-                TodayScheduleView()
-                    .environmentObject(appState)
-                    .frame(maxHeight: .infinity)
-
-                Spacer(minLength: 0)
+                        TodayScheduleView()
+                            .environmentObject(appState)
+                            .frame(minHeight: LCCLayout.Dashboard.todayScheduleMinimumHeight)
+                    }
+                    .padding(.trailing, 4)
+                    .padding(.bottom, 8)
+                }
+                .scrollIndicators(.visible)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding(outerPadding)
         }

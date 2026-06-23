@@ -10,10 +10,8 @@
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
 //  Notes:
-//  - Launch at Startup is an app/user preference and is not exported with project configurations.
-//  - Prevent Computer Sleep is an app/user preference and is not exported with project configurations.
-//  - Operational Log Retention is an app/user preference and is not exported with project configurations.
-//  - Syslog Device Name is an app/user preference and is not exported with project configurations.
+//  - App preferences are exported so configurations can be moved between machines,
+//    but App Preferences default to unchecked during selective import.
 //  - Schedule enable toggles affect scheduled Events only.
 //  - Manual Action buttons still run regardless of schedule toggle state.
 //  - Show Actions execute message steps.
@@ -26,7 +24,7 @@ import Foundation
 
 // MARK: - Dock Icon Visibility Preference
 
-enum DockIconVisibilityPreference: String, CaseIterable, Identifiable {
+enum DockIconVisibilityPreference: String, CaseIterable, Codable, Identifiable {
     case always
     case never
     case showWhenDashboardWindowIsOpen
@@ -183,16 +181,80 @@ struct ConfigurationImportPreview {
     var summary: ConfigurationAuditSummary
 }
 
+// MARK: - Configuration Import Options
+
+enum ConfigurationImportMode: String, CaseIterable, Identifiable {
+    case mergeWithCurrent
+    case replaceSelected
+    case newBlankShow
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .mergeWithCurrent:
+            return "Merge with Current Show"
+
+        case .replaceSelected:
+            return "Replace Selected Items"
+
+        case .newBlankShow:
+            return "Import into New / Blank Show"
+        }
+    }
+}
+
+struct ConfigurationImportOptions {
+    var mode: ConfigurationImportMode
+    var importAppPreferences: Bool
+    var importProjectPreferences: Bool
+    var importVolumePreferences: Bool
+    var importActions: Bool
+    var importEvents: Bool
+    var importScheduleEnableStates: Bool
+
+    static var defaultSelection: ConfigurationImportOptions {
+        ConfigurationImportOptions(
+            mode: .replaceSelected,
+            importAppPreferences: false,
+            importProjectPreferences: true,
+            importVolumePreferences: true,
+            importActions: true,
+            importEvents: true,
+            importScheduleEnableStates: true
+        )
+    }
+}
+
+struct ConfigurationImportResult {
+    var summary: ConfigurationAuditSummary
+    var reportLines: [String]
+
+    var statusLine: String {
+        let reportText = reportLines.isEmpty
+            ? "No merge conflicts."
+            : "Report: \(reportLines.count) item\(reportLines.count == 1 ? "" : "s")."
+
+        return "Actions: \(summary.actionCount). Events: \(summary.eventCount). Recurring Series: \(summary.recurringSeriesCount). Schedule Check: \(summary.statusText). \(reportText)"
+    }
+}
+
 // MARK: - Configuration Import Errors
 
 enum ConfigurationImportError: LocalizedError {
     case actionsRunning(count: Int)
+    case invalidSelection(String)
 
     var errorDescription: String? {
         switch self {
         case .actionsRunning(let count):
             let actionText = count == 1 ? "Action is" : "Actions are"
-            return "Import blocked because \(count) \(actionText) currently running. Wait for all Actions to finish before replacing the project configuration."
+            return "Import blocked because \(count) \(actionText) currently running. Wait for all Actions to finish before importing configuration data."
+
+        case .invalidSelection(let message):
+            return message
         }
     }
 }
@@ -521,7 +583,7 @@ final class AppState: ObservableObject {
 
     // MARK: - App Defaults
 
-    private static func defaultSyslogDeviceName() -> String {
+    fileprivate static func defaultSyslogDeviceName() -> String {
         let candidate = Host.current().localizedName
             ?? Host.current().name
             ?? "Launch-Control-Center"
@@ -834,6 +896,11 @@ final class AppState: ObservableObject {
             projectNotes: projectNotes,
             use24HourTime: use24HourTime,
             weekStartDay: weekStartDay,
+            syslogDeviceName: syslogDeviceName,
+            operationalLogRetentionDays: operationalLogRetentionDays,
+            dockIconVisibilityPreference: dockIconVisibilityPreference,
+            launchAtStartupEnabled: launchAtStartupEnabled,
+            preventComputerSleepEnabled: preventComputerSleepEnabled,
             incomingUDPPort: incomingUDPPort,
             defaultDestinationHost: defaultDestinationHost,
             defaultDestinationPort: defaultDestinationPort,
@@ -873,19 +940,42 @@ final class AppState: ObservableObject {
     }
 
     func importConfiguration(from url: URL) throws {
+        let options = ConfigurationImportOptions(
+            mode: .replaceSelected,
+            importAppPreferences: true,
+            importProjectPreferences: true,
+            importVolumePreferences: true,
+            importActions: true,
+            importEvents: true,
+            importScheduleEnableStates: true
+        )
+
+        _ = try importConfiguration(from: url, options: options)
+    }
+
+    func importConfiguration(
+        from url: URL,
+        options: ConfigurationImportOptions
+    ) throws -> ConfigurationImportResult {
         let configuration = try decodeConfiguration(from: url)
 
-        guard runningActionIDs.isEmpty else {
-            let runningCount = runningActionIDs.count
-            let message = "Configuration import blocked because \(runningCount) Action\(runningCount == 1 ? " is" : "s are") still running."
+        try validateConfigurationImport(options: options)
+        try ensureNoActionsRunningForImport()
 
-            lastMessage = message
-            logger.warning(message)
+        let reportLines = try applyConfiguration(
+            configuration,
+            options: options
+        )
 
-            throw ConfigurationImportError.actionsRunning(count: runningCount)
-        }
+        var summary = auditSummary(for: currentConfigurationSnapshot())
+        summary.issues.append(contentsOf: reportLines.map {
+            ConfigurationAuditIssue(severity: .warning, message: $0)
+        })
 
-        applyConfiguration(configuration)
+        return ConfigurationImportResult(
+            summary: summary,
+            reportLines: reportLines
+        )
     }
 
     func previewConfigurationImport(from url: URL) throws -> ConfigurationImportPreview {
@@ -898,13 +988,22 @@ final class AppState: ObservableObject {
     }
 
     func currentConfigurationAuditSummary() -> ConfigurationAuditSummary {
-        let configuration = LaunchControlConfiguration(
+        auditSummary(for: currentConfigurationSnapshot())
+    }
+
+    private func currentConfigurationSnapshot() -> LaunchControlConfiguration {
+        LaunchControlConfiguration(
             version: 1,
             exportedAt: Date(),
             projectName: projectName,
             projectNotes: projectNotes,
             use24HourTime: use24HourTime,
             weekStartDay: weekStartDay,
+            syslogDeviceName: syslogDeviceName,
+            operationalLogRetentionDays: operationalLogRetentionDays,
+            dockIconVisibilityPreference: dockIconVisibilityPreference,
+            launchAtStartupEnabled: launchAtStartupEnabled,
+            preventComputerSleepEnabled: preventComputerSleepEnabled,
             incomingUDPPort: incomingUDPPort,
             defaultDestinationHost: defaultDestinationHost,
             defaultDestinationPort: defaultDestinationPort,
@@ -928,8 +1027,6 @@ final class AppState: ObservableObject {
             scheduledEvents: scheduledEvents,
             scheduleEntries: scheduleEntries
         )
-
-        return auditSummary(for: configuration)
     }
 
     private func decodeConfiguration(from url: URL) throws -> LaunchControlConfiguration {
@@ -1195,41 +1292,109 @@ final class AppState: ObservableObject {
             + (components.second ?? 0)
     }
 
+    private func validateConfigurationImport(options: ConfigurationImportOptions) throws {
+        if options.importEvents && options.importActions == false {
+            throw ConfigurationImportError.invalidSelection("Events cannot be imported unless Actions are also imported. Events need valid Action references.")
+        }
+    }
+
+    private func ensureNoActionsRunningForImport() throws {
+        guard runningActionIDs.isEmpty else {
+            let runningCount = runningActionIDs.count
+            let message = "Configuration import blocked because \(runningCount) Action\(runningCount == 1 ? " is" : "s are") still running."
+
+            lastMessage = message
+            logger.warning(message)
+
+            throw ConfigurationImportError.actionsRunning(count: runningCount)
+        }
+    }
+
     private func applyConfiguration(_ configuration: LaunchControlConfiguration) {
-        projectName = configuration.projectName
-        projectNotes = configuration.projectNotes
-        use24HourTime = configuration.use24HourTime
-        weekStartDay = configuration.weekStartDay
+        let options = ConfigurationImportOptions(
+            mode: .replaceSelected,
+            importAppPreferences: true,
+            importProjectPreferences: true,
+            importVolumePreferences: true,
+            importActions: true,
+            importEvents: true,
+            importScheduleEnableStates: true
+        )
 
-        incomingUDPPort = configuration.incomingUDPPort
-        defaultDestinationHost = configuration.defaultDestinationHost
-        defaultDestinationPort = configuration.defaultDestinationPort
+        _ = try? applyConfiguration(configuration, options: options)
+    }
 
-        volumeDestinationHost = configuration.volumeDestinationHost
-        volumeDestinationPort = configuration.volumeDestinationPort
-        volumeMessagePrefix = configuration.volumeMessagePrefix
-        volumeOutputMinimum = configuration.volumeOutputMinimum
-        volumeOutputMaximum = configuration.volumeOutputMaximum
-        volumeMuteLevel = configuration.volumeMuteLevel
+    @discardableResult
+    private func applyConfiguration(
+        _ configuration: LaunchControlConfiguration,
+        options: ConfigurationImportOptions
+    ) throws -> [String] {
+        var reportLines: [String] = []
 
-        showActionsEnabled = configuration.showActionsEnabled
-        utilityActionsEnabled = configuration.utilityActionsEnabled
-        scheduleEnabledOnMessage = configuration.scheduleEnabledOnMessage
-        scheduleEnabledOffMessage = configuration.scheduleEnabledOffMessage
+        if options.mode == .newBlankShow {
+            applyBlankShowBaseline()
+            reportLines.append("Started from a blank show before import.")
+        }
 
-        volumeLevel = configuration.volumeLevel
-        lastUnmutedVolumeLevel = configuration.lastUnmutedVolumeLevel
-        isMuted = configuration.isMuted
+        if options.importAppPreferences {
+            try applyAppPreferences(from: configuration)
+        }
 
-        lowVolumeLevel = configuration.lowVolumeLevel
-        normalVolumeLevel = configuration.normalVolumeLevel
-        highVolumeLevel = configuration.highVolumeLevel
+        if options.importProjectPreferences {
+            applyProjectPreferences(from: configuration)
+        }
 
-        actionDefinitions = configuration.actionDefinitions
-        scheduledEvents = configuration.scheduledEvents
-        scheduleEntries = configuration.scheduleEntries
+        if options.importVolumePreferences {
+            applyVolumePreferences(from: configuration)
+        }
 
-        resetScheduleOccurrenceGuards()
+        if options.importScheduleEnableStates {
+            applyScheduleEnableStates(from: configuration)
+        }
+
+        var actionIDMap: [UUID: UUID] = [:]
+
+        if options.importActions {
+            switch options.mode {
+            case .mergeWithCurrent:
+                let result = mergedActions(from: configuration.actionDefinitions)
+                actionDefinitions = result.actions
+                actionIDMap = result.idMap
+                reportLines.append(contentsOf: result.reportLines)
+
+            case .replaceSelected, .newBlankShow:
+                actionDefinitions = configuration.actionDefinitions
+                actionIDMap = Dictionary(
+                    uniqueKeysWithValues: configuration.actionDefinitions.map { ($0.id, $0.id) }
+                )
+            }
+        }
+
+        if options.importEvents {
+            switch options.mode {
+            case .mergeWithCurrent:
+                let result = mergedScheduleEntries(
+                    from: configuration.scheduleEntries,
+                    actionIDMap: actionIDMap
+                )
+                scheduleEntries = result.entries
+                scheduledEvents.append(contentsOf: configuration.scheduledEvents)
+                reportLines.append(contentsOf: result.reportLines)
+
+            case .replaceSelected, .newBlankShow:
+                scheduleEntries = configuration.scheduleEntries.map { entry in
+                    remappedScheduleEntry(entry, actionIDMap: actionIDMap)
+                }
+                scheduledEvents = configuration.scheduledEvents
+            }
+
+            scheduleExecutionHistory = []
+            PersistenceService.shared.deleteScheduleExecutionHistory()
+            resetScheduleOccurrenceGuards()
+            lastEventMessage = "No Event has run yet"
+        }
+
+        reportLines.append(contentsOf: configurationIntegrityReport())
 
         refreshLaunchAtStartupStatus()
         refreshSleepPreventionStatus()
@@ -1237,6 +1402,217 @@ final class AppState: ObservableObject {
         lastMessage = "Imported configuration: \(configuration.projectName)"
         controlStatus = .idle
         logger.info(lastMessage)
+
+        return reportLines
+    }
+
+    private func applyAppPreferences(from configuration: LaunchControlConfiguration) throws {
+        use24HourTime = configuration.use24HourTime
+        weekStartDay = configuration.weekStartDay
+        syslogDeviceName = configuration.syslogDeviceName
+        operationalLogRetentionDays = clampedOperationalLogRetentionDays(configuration.operationalLogRetentionDays)
+        dockIconVisibilityPreference = configuration.dockIconVisibilityPreference
+
+        setPreventComputerSleepEnabled(configuration.preventComputerSleepEnabled)
+        try loginStartupService.setEnabled(configuration.launchAtStartupEnabled)
+    }
+
+    private func applyProjectPreferences(from configuration: LaunchControlConfiguration) {
+        projectName = configuration.projectName
+        projectNotes = configuration.projectNotes
+        incomingUDPPort = configuration.incomingUDPPort
+        defaultDestinationHost = configuration.defaultDestinationHost
+        defaultDestinationPort = configuration.defaultDestinationPort
+    }
+
+    private func applyVolumePreferences(from configuration: LaunchControlConfiguration) {
+        volumePreferenceOutputIsSuspended = true
+        volumeDestinationHost = configuration.volumeDestinationHost
+        volumeDestinationPort = configuration.volumeDestinationPort
+        volumeMessagePrefix = configuration.volumeMessagePrefix
+        volumeOutputMinimum = configuration.volumeOutputMinimum
+        volumeOutputMaximum = configuration.volumeOutputMaximum
+        volumeMuteLevel = configuration.volumeMuteLevel
+        volumeLevel = configuration.volumeLevel
+        lastUnmutedVolumeLevel = configuration.lastUnmutedVolumeLevel
+        isMuted = configuration.isMuted
+        lowVolumeLevel = configuration.lowVolumeLevel
+        normalVolumeLevel = configuration.normalVolumeLevel
+        highVolumeLevel = configuration.highVolumeLevel
+        volumePreferenceOutputIsSuspended = false
+    }
+
+    private func applyScheduleEnableStates(from configuration: LaunchControlConfiguration) {
+        showActionsEnabled = configuration.showActionsEnabled
+        utilityActionsEnabled = configuration.utilityActionsEnabled
+        scheduleEnabledOnMessage = configuration.scheduleEnabledOnMessage
+        scheduleEnabledOffMessage = configuration.scheduleEnabledOffMessage
+    }
+
+    private func applyBlankShowBaseline() {
+        projectName = "Untitled Project"
+        projectNotes = ""
+        incomingUDPPort = 8000
+        defaultDestinationHost = "127.0.0.1"
+        defaultDestinationPort = 8001
+
+        volumePreferenceOutputIsSuspended = true
+        volumeDestinationHost = "127.0.0.1"
+        volumeDestinationPort = 8001
+        volumeMessagePrefix = "/cue/selected/level/0/"
+        volumeOutputMinimum = -60
+        volumeOutputMaximum = 12
+        volumeMuteLevel = -60
+        volumeLevel = 0.75
+        lastUnmutedVolumeLevel = 0.75
+        isMuted = false
+        lowVolumeLevel = 0.35
+        normalVolumeLevel = 0.75
+        highVolumeLevel = 0.90
+        volumePreferenceOutputIsSuspended = false
+
+        showActionsEnabled = true
+        utilityActionsEnabled = true
+        scheduleEnabledOnMessage = "SCHEDULE_ENABLED"
+        scheduleEnabledOffMessage = "SCHEDULE_DISABLED"
+
+        actionDefinitions = []
+        PersistenceService.shared.deleteActionDefinitions()
+        deleteEventsAndScheduleHistory()
+    }
+
+    private func mergedActions(
+        from importedActions: [ActionDefinition]
+    ) -> (actions: [ActionDefinition], idMap: [UUID: UUID], reportLines: [String]) {
+        var result = actionDefinitions
+        var existingIDs = Set(result.map { $0.id })
+        var existingNames = Set(result.map { $0.name.lowercased() })
+        var idMap: [UUID: UUID] = [:]
+        var reportLines: [String] = []
+
+        for importedAction in importedActions {
+            var action = importedAction
+            let idConflict = existingIDs.contains(action.id)
+            let nameConflict = existingNames.contains(action.name.lowercased())
+
+            if idConflict || nameConflict {
+                let originalName = action.name
+                action.id = UUID()
+                action.name = uniqueImportedName(
+                    baseName: originalName,
+                    existingNames: existingNames
+                )
+                reportLines.append("Action conflict: imported \"\(originalName)\" as \"\(action.name)\".")
+            }
+
+            idMap[importedAction.id] = action.id
+            result.append(action)
+            existingIDs.insert(action.id)
+            existingNames.insert(action.name.lowercased())
+        }
+
+        return (result, idMap, reportLines)
+    }
+
+    private func mergedScheduleEntries(
+        from importedEntries: [ScheduleEntry],
+        actionIDMap: [UUID: UUID]
+    ) -> (entries: [ScheduleEntry], reportLines: [String]) {
+        var result = scheduleEntries
+        var existingEntryIDs = Set(result.map { $0.id })
+        var existingSeriesIDs = Set(result.compactMap { $0.seriesID })
+        var existingSeriesNames = Set(result.compactMap { $0.seriesName?.lowercased() })
+        var seriesIDMap: [UUID: UUID] = [:]
+        var reportLines: [String] = []
+
+        for importedEntry in importedEntries {
+            var entry = remappedScheduleEntry(importedEntry, actionIDMap: actionIDMap)
+
+            if existingEntryIDs.contains(entry.id) {
+                entry.id = UUID()
+                reportLines.append("Event conflict: imported Event with a new ID.")
+            }
+
+            if let seriesID = entry.seriesID {
+                if let mappedSeriesID = seriesIDMap[seriesID] {
+                    entry.seriesID = mappedSeriesID
+                } else if existingSeriesIDs.contains(seriesID) {
+                    let newSeriesID = UUID()
+                    seriesIDMap[seriesID] = newSeriesID
+                    entry.seriesID = newSeriesID
+                    reportLines.append("Series conflict: imported recurring series with a new ID.")
+                } else {
+                    seriesIDMap[seriesID] = seriesID
+                    existingSeriesIDs.insert(seriesID)
+                }
+            }
+
+            if let seriesName = entry.seriesName,
+               existingSeriesNames.contains(seriesName.lowercased()) {
+                let newName = uniqueImportedName(
+                    baseName: seriesName,
+                    existingNames: existingSeriesNames
+                )
+                entry.seriesName = newName
+                existingSeriesNames.insert(newName.lowercased())
+                reportLines.append("Series name conflict: imported \"\(seriesName)\" as \"\(newName)\".")
+            } else if let seriesName = entry.seriesName {
+                existingSeriesNames.insert(seriesName.lowercased())
+            }
+
+            result.append(entry)
+            existingEntryIDs.insert(entry.id)
+        }
+
+        return (result, reportLines)
+    }
+
+    private func remappedScheduleEntry(
+        _ entry: ScheduleEntry,
+        actionIDMap: [UUID: UUID]
+    ) -> ScheduleEntry {
+        var remapped = entry
+
+        if let mappedActionID = actionIDMap[entry.actionDefinitionID] {
+            remapped.actionDefinitionID = mappedActionID
+        }
+
+        return remapped
+    }
+
+    private func uniqueImportedName(
+        baseName: String,
+        existingNames: Set<String>
+    ) -> String {
+        let trimmedBaseName = baseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = trimmedBaseName.isEmpty ? "Imported" : trimmedBaseName
+        let copyName = "\(base) copy"
+
+        if existingNames.contains(copyName.lowercased()) == false {
+            return copyName
+        }
+
+        var index = 2
+        while true {
+            let candidate = "\(base) copy \(index)"
+            if existingNames.contains(candidate.lowercased()) == false {
+                return candidate
+            }
+            index += 1
+        }
+    }
+
+    private func configurationIntegrityReport() -> [String] {
+        let actionIDs = Set(actionDefinitions.map { $0.id })
+        let missingActionEvents = scheduleEntries.filter {
+            actionIDs.contains($0.actionDefinitionID) == false
+        }
+
+        guard missingActionEvents.isEmpty == false else {
+            return []
+        }
+
+        return ["\(missingActionEvents.count) Event\(missingActionEvents.count == 1 ? "" : "s") reference missing Actions after import."]
     }
 
     // MARK: - Reset / Destructive Actions
@@ -2239,6 +2615,12 @@ private struct LaunchControlConfiguration: Codable {
     let use24HourTime: Bool
     let weekStartDay: Int
 
+    let syslogDeviceName: String
+    let operationalLogRetentionDays: Int
+    let dockIconVisibilityPreference: DockIconVisibilityPreference
+    let launchAtStartupEnabled: Bool
+    let preventComputerSleepEnabled: Bool
+
     let incomingUDPPort: Int
     let defaultDestinationHost: String
     let defaultDestinationPort: Int
@@ -2275,6 +2657,12 @@ private struct LaunchControlConfiguration: Codable {
         case projectNotes
         case use24HourTime
         case weekStartDay
+
+        case syslogDeviceName
+        case operationalLogRetentionDays
+        case dockIconVisibilityPreference
+        case launchAtStartupEnabled
+        case preventComputerSleepEnabled
 
         case incomingUDPPort
         case defaultDestinationHost
@@ -2313,6 +2701,11 @@ private struct LaunchControlConfiguration: Codable {
         projectNotes: String,
         use24HourTime: Bool,
         weekStartDay: Int,
+        syslogDeviceName: String,
+        operationalLogRetentionDays: Int,
+        dockIconVisibilityPreference: DockIconVisibilityPreference,
+        launchAtStartupEnabled: Bool,
+        preventComputerSleepEnabled: Bool,
         incomingUDPPort: Int,
         defaultDestinationHost: String,
         defaultDestinationPort: Int,
@@ -2343,6 +2736,12 @@ private struct LaunchControlConfiguration: Codable {
         self.projectNotes = projectNotes
         self.use24HourTime = use24HourTime
         self.weekStartDay = weekStartDay
+
+        self.syslogDeviceName = syslogDeviceName
+        self.operationalLogRetentionDays = operationalLogRetentionDays
+        self.dockIconVisibilityPreference = dockIconVisibilityPreference
+        self.launchAtStartupEnabled = launchAtStartupEnabled
+        self.preventComputerSleepEnabled = preventComputerSleepEnabled
 
         self.incomingUDPPort = incomingUDPPort
         self.defaultDestinationHost = defaultDestinationHost
@@ -2383,6 +2782,12 @@ private struct LaunchControlConfiguration: Codable {
         projectNotes = try container.decodeIfPresent(String.self, forKey: .projectNotes) ?? ""
         use24HourTime = try container.decodeIfPresent(Bool.self, forKey: .use24HourTime) ?? true
         weekStartDay = try container.decodeIfPresent(Int.self, forKey: .weekStartDay) ?? 1
+
+        syslogDeviceName = try container.decodeIfPresent(String.self, forKey: .syslogDeviceName) ?? AppState.defaultSyslogDeviceName()
+        operationalLogRetentionDays = try container.decodeIfPresent(Int.self, forKey: .operationalLogRetentionDays) ?? 90
+        dockIconVisibilityPreference = try container.decodeIfPresent(DockIconVisibilityPreference.self, forKey: .dockIconVisibilityPreference) ?? .showWhenDashboardWindowIsOpen
+        launchAtStartupEnabled = try container.decodeIfPresent(Bool.self, forKey: .launchAtStartupEnabled) ?? false
+        preventComputerSleepEnabled = try container.decodeIfPresent(Bool.self, forKey: .preventComputerSleepEnabled) ?? false
 
         incomingUDPPort = try container.decodeIfPresent(Int.self, forKey: .incomingUDPPort) ?? 8000
         defaultDestinationHost = try container.decodeIfPresent(String.self, forKey: .defaultDestinationHost) ?? "127.0.0.1"
@@ -2427,6 +2832,12 @@ private struct LaunchControlConfiguration: Codable {
         try container.encode(projectNotes, forKey: .projectNotes)
         try container.encode(use24HourTime, forKey: .use24HourTime)
         try container.encode(weekStartDay, forKey: .weekStartDay)
+
+        try container.encode(syslogDeviceName, forKey: .syslogDeviceName)
+        try container.encode(operationalLogRetentionDays, forKey: .operationalLogRetentionDays)
+        try container.encode(dockIconVisibilityPreference, forKey: .dockIconVisibilityPreference)
+        try container.encode(launchAtStartupEnabled, forKey: .launchAtStartupEnabled)
+        try container.encode(preventComputerSleepEnabled, forKey: .preventComputerSleepEnabled)
 
         try container.encode(incomingUDPPort, forKey: .incomingUDPPort)
         try container.encode(defaultDestinationHost, forKey: .defaultDestinationHost)

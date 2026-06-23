@@ -861,7 +861,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
                 title: "Configuration Backup",
-                subtitle: "Export or replace the full project configuration."
+                subtitle: "Export full backups or selectively import configuration data."
             )
 
             HStack(spacing: 12) {
@@ -874,7 +874,7 @@ struct SetupView: View {
                         .font(.subheadline)
                         .bold()
 
-                    Text("Includes settings, Actions, scheduled Events, repeats, exclusions, notes, and volume output settings.")
+                    Text("Includes app and project settings, Actions, scheduled Events, repeats, exclusions, notes, and volume output settings.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -947,7 +947,7 @@ struct SetupView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(summary.hasErrors ? LCCDesign.ColorToken.error : LCCDesign.ColorToken.warning)
 
-                Text("Schedule Check")
+                Text("Schedule Check / Import Report")
                     .font(.subheadline)
                     .bold()
 
@@ -1204,15 +1204,15 @@ struct SetupView: View {
         do {
             let preview = try appState.previewConfigurationImport(from: url)
 
-            guard confirmImportReplacement(preview: preview) else {
+            guard let options = ConfigurationImportDialog.present(preview: preview) else {
                 configurationStatus = "Import cancelled."
                 configurationAuditSummary = preview.summary
                 return
             }
 
-            try appState.importConfiguration(from: url)
-            configurationAuditSummary = preview.summary
-            configurationStatus = "Imported \(url.lastPathComponent). \(summaryLine(for: preview.summary))"
+            let result = try appState.importConfiguration(from: url, options: options)
+            configurationAuditSummary = result.summary
+            configurationStatus = "Imported \(url.lastPathComponent). \(result.statusLine)"
         } catch {
             configurationAuditSummary = nil
             configurationStatus = "Import failed: \(error.localizedDescription)"
@@ -1249,46 +1249,6 @@ struct SetupView: View {
         }
 
         return url.deletingPathExtension().appendingPathExtension("launchcontrol")
-    }
-
-    private func confirmImportReplacement(preview: ConfigurationImportPreview) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Replace Current Configuration?"
-        alert.informativeText = importConfirmationText(for: preview)
-        alert.alertStyle = preview.summary.hasErrors ? .critical : .warning
-        alert.addButton(withTitle: "Import and Replace")
-        alert.addButton(withTitle: "Cancel")
-
-        let response = alert.runModal()
-        return response == .alertFirstButtonReturn
-    }
-
-    private func importConfirmationText(for preview: ConfigurationImportPreview) -> String {
-        var lines: [String] = []
-
-        lines.append("Importing \(preview.fileName) will replace the current settings, Actions, and scheduled Events.")
-        lines.append("")
-        lines.append("Imported Configuration")
-        lines.append(configurationSummaryText(for: preview.summary))
-
-        if preview.summary.issues.isEmpty == false {
-            lines.append("")
-            lines.append("Schedule Check")
-
-            for issue in preview.summary.issues.prefix(8) {
-                let prefix = issue.severity == .error ? "Error" : "Warning"
-                lines.append("• \(prefix): \(issue.message)")
-            }
-
-            if preview.summary.issues.count > 8 {
-                lines.append("• …and \(preview.summary.issues.count - 8) more issue(s).")
-            }
-        }
-
-        lines.append("")
-        lines.append("This cannot be undone from within Launch Control Center. Export the current configuration first if you may need to return to it.")
-
-        return lines.joined(separator: "\n")
     }
 
     private func configurationSummaryText(for summary: ConfigurationAuditSummary) -> String {
@@ -1432,6 +1392,173 @@ struct SetupView: View {
     private var insetPanelBackground: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
+    }
+}
+
+
+// MARK: - Configuration Import Dialog
+
+private final class ConfigurationImportDialog: NSObject {
+    private let preview: ConfigurationImportPreview
+
+    private let modePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let appPreferencesCheckbox = NSButton(checkboxWithTitle: "App Preferences", target: nil, action: nil)
+    private let projectPreferencesCheckbox = NSButton(checkboxWithTitle: "Project Preferences", target: nil, action: nil)
+    private let volumePreferencesCheckbox = NSButton(checkboxWithTitle: "Volume Preferences", target: nil, action: nil)
+    private let actionsCheckbox = NSButton(checkboxWithTitle: "Actions", target: nil, action: nil)
+    private let eventsCheckbox = NSButton(checkboxWithTitle: "Events and Recurrence Data", target: nil, action: nil)
+    private let scheduleStatesCheckbox = NSButton(checkboxWithTitle: "Schedule Enable States", target: nil, action: nil)
+
+    private init(preview: ConfigurationImportPreview) {
+        self.preview = preview
+        super.init()
+        configureControls()
+    }
+
+    static func present(preview: ConfigurationImportPreview) -> ConfigurationImportOptions? {
+        let dialog = ConfigurationImportDialog(preview: preview)
+        return dialog.run()
+    }
+
+    private func configureControls() {
+        modePopup.removeAllItems()
+        modePopup.addItems(withTitles: ConfigurationImportMode.allCases.map(\.displayName))
+        modePopup.selectItem(at: ConfigurationImportMode.allCases.firstIndex(of: .replaceSelected) ?? 0)
+
+        appPreferencesCheckbox.state = .off
+        projectPreferencesCheckbox.state = .on
+        volumePreferencesCheckbox.state = .on
+        actionsCheckbox.state = .on
+        eventsCheckbox.state = .on
+        scheduleStatesCheckbox.state = .on
+
+        actionsCheckbox.target = self
+        actionsCheckbox.action = #selector(actionsCheckboxChanged)
+    }
+
+    private func run() -> ConfigurationImportOptions? {
+        let alert = NSAlert()
+        alert.messageText = "Import Configuration"
+        alert.informativeText = "Choose what to import from \(preview.fileName). Events require Actions because scheduled Events reference saved Actions. Import is blocked while Actions are running."
+        alert.alertStyle = preview.summary.hasErrors ? .critical : .warning
+        alert.accessoryView = accessoryView
+        alert.addButton(withTitle: "Import Selected")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else {
+            return nil
+        }
+
+        return selectedOptions
+    }
+
+    private var selectedOptions: ConfigurationImportOptions {
+        let selectedIndex = modePopup.indexOfSelectedItem
+        let selectedMode = ConfigurationImportMode.allCases.indices.contains(selectedIndex)
+            ? ConfigurationImportMode.allCases[selectedIndex]
+            : .replaceSelected
+
+        return ConfigurationImportOptions(
+            mode: selectedMode,
+            importAppPreferences: appPreferencesCheckbox.state == .on,
+            importProjectPreferences: projectPreferencesCheckbox.state == .on,
+            importVolumePreferences: volumePreferencesCheckbox.state == .on,
+            importActions: actionsCheckbox.state == .on,
+            importEvents: eventsCheckbox.state == .on,
+            importScheduleEnableStates: scheduleStatesCheckbox.state == .on
+        )
+    }
+
+    private var accessoryView: NSView {
+        let container = NSStackView()
+        container.orientation = .vertical
+        container.alignment = .leading
+        container.spacing = 12
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addArrangedSubview(summaryBox)
+        container.addArrangedSubview(labeledPopup)
+        container.addArrangedSubview(checkboxBox)
+        container.addArrangedSubview(footerText)
+
+        let wrapper = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 360))
+        wrapper.addSubview(container)
+
+        NSLayoutConstraint.activate([
+            container.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
+            container.topAnchor.constraint(equalTo: wrapper.topAnchor),
+            container.bottomAnchor.constraint(lessThanOrEqualTo: wrapper.bottomAnchor)
+        ])
+
+        return wrapper
+    }
+
+    private var summaryBox: NSView {
+        let text = NSTextField(labelWithString: configurationSummaryText)
+        text.font = .systemFont(ofSize: 11)
+        text.textColor = .secondaryLabelColor
+        text.lineBreakMode = .byWordWrapping
+        text.maximumNumberOfLines = 0
+        text.translatesAutoresizingMaskIntoConstraints = false
+        text.widthAnchor.constraint(equalToConstant: 440).isActive = true
+        return text
+    }
+
+    private var labeledPopup: NSView {
+        let label = NSTextField(labelWithString: "Import Mode")
+        label.font = .boldSystemFont(ofSize: 12)
+
+        let stack = NSStackView(views: [label, modePopup])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 5
+        modePopup.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        return stack
+    }
+
+    private var checkboxBox: NSView {
+        let label = NSTextField(labelWithString: "Import Items")
+        label.font = .boldSystemFont(ofSize: 12)
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 5
+        stack.addArrangedSubview(label)
+        stack.addArrangedSubview(appPreferencesCheckbox)
+        stack.addArrangedSubview(projectPreferencesCheckbox)
+        stack.addArrangedSubview(volumePreferencesCheckbox)
+        stack.addArrangedSubview(actionsCheckbox)
+        stack.addArrangedSubview(eventsCheckbox)
+        stack.addArrangedSubview(scheduleStatesCheckbox)
+        return stack
+    }
+
+    private var footerText: NSView {
+        let text = NSTextField(labelWithString: "Merge imports matching items with short copy names where needed. Replace changes only selected groups. New / Blank clears the current show first, while preserving local app preferences unless App Preferences is checked.")
+        text.font = .systemFont(ofSize: 10)
+        text.textColor = .tertiaryLabelColor
+        text.lineBreakMode = .byWordWrapping
+        text.maximumNumberOfLines = 0
+        text.translatesAutoresizingMaskIntoConstraints = false
+        text.widthAnchor.constraint(equalToConstant: 440).isActive = true
+        return text
+    }
+
+    private var configurationSummaryText: String {
+        let summary = preview.summary
+        return "Project: \(summary.projectName)\nActions: \(summary.actionCount) • Events: \(summary.eventCount) • Recurring Series: \(summary.recurringSeriesCount)\nSchedule Check: \(summary.statusText)"
+    }
+
+    @objc private func actionsCheckboxChanged() {
+        if actionsCheckbox.state == .off {
+            eventsCheckbox.state = .off
+            eventsCheckbox.isEnabled = false
+        } else {
+            eventsCheckbox.isEnabled = true
+        }
     }
 }
 

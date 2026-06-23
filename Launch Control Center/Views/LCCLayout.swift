@@ -130,10 +130,10 @@ enum LCCLayout {
     }
 
     enum Dashboard {
-        static let sectionSpacing: CGFloat = 14
+        static let sectionSpacing: CGFloat = 10
         static let sectionHeaderSpacing: CGFloat = 10
-        static let clockPanelHeight: CGFloat = 170
-        static let clockPanelVerticalPadding: CGFloat = 12
+        static let clockPanelHeight: CGFloat = 145
+        static let clockPanelVerticalPadding: CGFloat = 8
         static let clockPanelHorizontalPadding: CGFloat = 16
         static let clockProjectNameFontSize: CGFloat = 14
         static let clockProjectNameFontWeight: Font.Weight = .medium
@@ -142,6 +142,8 @@ enum LCCLayout {
         static let clockDateFont: Font = .subheadline
         static let manualActionsMinimumColumnHeight: CGFloat = 178
         static let manualActionsMaximumColumnHeight: CGFloat = 245
+        static let eventSummaryHeight: CGFloat = 124
+        static let todayScheduleMinimumHeight: CGFloat = 320
         static let volumeOutputFontSize: CGFloat = 22
         static let volumeOutputFontWeight: Font.Weight = .semibold
     }
