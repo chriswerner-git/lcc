@@ -309,6 +309,7 @@ final class AppState: ObservableObject {
     private let appLaunchDate = Date()
 
     private var dailyHealthLogTimer: Timer?
+    private var persistenceFailureObserver: NSObjectProtocol?
 
     private let loginStartupService = LoginStartupService()
     private let sleepPreventionService = SleepPreventionService()
@@ -552,10 +553,13 @@ final class AppState: ObservableObject {
             ?? UserDefaults.standard.object(forKey: "openingVolumeLevel") as? Double
             ?? 0.90
 
+        startPersistenceFailureMonitoring()
+
         self.actionDefinitions = PersistenceService.shared.loadActionDefinitions()
         self.scheduledEvents = PersistenceService.shared.loadScheduledEvents()
         self.scheduleEntries = PersistenceService.shared.loadScheduleEntries()
         self.scheduleExecutionHistory = PersistenceService.shared.loadScheduleExecutionHistory()
+        surfaceRecentPersistenceFailures()
         pruneScheduleExecutionHistory(now: Date())
 
         purgeOldOperationalLogs()
@@ -576,9 +580,44 @@ final class AppState: ObservableObject {
         dailyHealthLogTimer?.invalidate()
         dailyHealthLogTimer = nil
 
+        if let persistenceFailureObserver {
+            NotificationCenter.default.removeObserver(persistenceFailureObserver)
+        }
+
         scheduleEngine.stop()
         systemLifecycleService.stop()
         sleepPreventionService.disable()
+    }
+
+    // MARK: - Persistence Failure Monitoring
+
+    private func startPersistenceFailureMonitoring() {
+        persistenceFailureObserver = NotificationCenter.default.addObserver(
+            forName: .persistenceServiceDidReportError,
+            object: PersistenceService.shared,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else {
+                return
+            }
+
+            let message = notification.userInfo?["message"] as? String
+                ?? "Persistence error. Check operational logs."
+
+            self.controlStatus = .error
+            self.lastMessage = message
+        }
+    }
+
+    private func surfaceRecentPersistenceFailures() {
+        let messages = PersistenceService.shared.consumeRecentErrorMessages()
+
+        guard messages.isEmpty == false else {
+            return
+        }
+
+        controlStatus = .error
+        lastMessage = messages.last ?? "Persistence error. Check operational logs."
     }
 
     // MARK: - App Defaults
@@ -2139,9 +2178,9 @@ final class AppState: ObservableObject {
 
     @MainActor
     private func sendMessageCommand(_ command: UDPCommand) -> Bool {
-        guard command.port >= 0,
+        guard command.port >= 1,
               command.port <= Int(UInt16.max) else {
-            lastMessage = "Invalid UDP port for Step: \(command.name)"
+            lastMessage = "Invalid UDP destination port for Step: \(command.name). Use 1–65535."
             logger.error(lastMessage)
             return false
         }
@@ -2177,9 +2216,9 @@ final class AppState: ObservableObject {
 
     @MainActor
     private func sendUtilityUDPCommand(_ command: UtilityCommand) {
-        guard command.udpPort >= 0,
+        guard command.udpPort >= 1,
               command.udpPort <= Int(UInt16.max) else {
-            lastMessage = "Invalid UDP port for Utility Step: \(command.name)"
+            lastMessage = "Invalid UDP destination port for Utility Step: \(command.name). Use 1–65535."
             controlStatus = .error
             logger.error(lastMessage)
             return
@@ -2248,9 +2287,9 @@ final class AppState: ObservableObject {
     }
 
     func sendVolumeLevel() {
-        guard volumeDestinationPort >= 0,
+        guard volumeDestinationPort >= 1,
               volumeDestinationPort <= Int(UInt16.max) else {
-            lastMessage = "Invalid volume UDP port"
+            lastMessage = "Invalid volume UDP destination port. Use 1–65535."
             controlStatus = .error
             logger.error(lastMessage)
             return

@@ -554,7 +554,7 @@ private struct TestingContentView: View {
     }
 
     private func validPort(_ value: Int) -> UInt16? {
-        guard value >= 0,
+        guard value >= 1,
               value <= Int(UInt16.max) else {
             return nil
         }

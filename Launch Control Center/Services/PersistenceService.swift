@@ -12,10 +12,19 @@
 
 import Foundation
 
+extension Notification.Name {
+    static let persistenceServiceDidReportError = Notification.Name(
+        "com.lunartelephone.launchcontrolcenter.persistenceServiceDidReportError"
+    )
+}
+
 final class PersistenceService {
     // MARK: - Singleton
 
     static let shared = PersistenceService()
+
+    private let errorLock = NSLock()
+    private var recentErrorMessages: [String] = []
 
     private init() {}
 
@@ -35,7 +44,7 @@ final class PersistenceService {
             let data = try JSONEncoder().encode(actions)
             UserDefaults.standard.set(data, forKey: actionsKey)
         } catch {
-            print("Failed to save Actions: \(error)")
+            reportFailure("Failed to save Actions", error: error)
         }
     }
 
@@ -47,7 +56,7 @@ final class PersistenceService {
         do {
             return try JSONDecoder().decode([ActionDefinition].self, from: data)
         } catch {
-            print("Failed to load Actions: \(error)")
+            reportFailure("Failed to load Actions", error: error)
             return []
         }
     }
@@ -63,7 +72,7 @@ final class PersistenceService {
             let data = try JSONEncoder().encode(entries)
             UserDefaults.standard.set(data, forKey: scheduleEntriesKey)
         } catch {
-            print("Failed to save Events: \(error)")
+            reportFailure("Failed to save Events", error: error)
         }
     }
 
@@ -75,7 +84,7 @@ final class PersistenceService {
         do {
             return try JSONDecoder().decode([ScheduleEntry].self, from: data)
         } catch {
-            print("Failed to load Events: \(error)")
+            reportFailure("Failed to load Events", error: error)
             return []
         }
     }
@@ -91,7 +100,7 @@ final class PersistenceService {
             let data = try JSONEncoder().encode(records)
             UserDefaults.standard.set(data, forKey: scheduleExecutionHistoryKey)
         } catch {
-            print("Failed to save Schedule Execution History: \(error)")
+            reportFailure("Failed to save Schedule Execution History", error: error)
         }
     }
 
@@ -103,7 +112,7 @@ final class PersistenceService {
         do {
             return try JSONDecoder().decode([ScheduleExecutionRecord].self, from: data)
         } catch {
-            print("Failed to load Schedule Execution History: \(error)")
+            reportFailure("Failed to load Schedule Execution History", error: error)
             return []
         }
     }
@@ -119,7 +128,7 @@ final class PersistenceService {
             let data = try JSONEncoder().encode(events)
             UserDefaults.standard.set(data, forKey: scheduledEventsKey)
         } catch {
-            print("Failed to save legacy Scheduled Events: \(error)")
+            reportFailure("Failed to save legacy Scheduled Events", error: error)
         }
     }
 
@@ -131,7 +140,7 @@ final class PersistenceService {
         do {
             return try JSONDecoder().decode([ScheduledEvent].self, from: data)
         } catch {
-            print("Failed to load legacy Scheduled Events: \(error)")
+            reportFailure("Failed to load legacy Scheduled Events", error: error)
             return []
         }
     }
@@ -139,6 +148,38 @@ final class PersistenceService {
     func deleteScheduledEvents() {
         UserDefaults.standard.removeObject(forKey: scheduledEventsKey)
     }
+
+    // MARK: - Error Reporting
+
+    func consumeRecentErrorMessages() -> [String] {
+        errorLock.lock()
+        defer { errorLock.unlock() }
+
+        let messages = recentErrorMessages
+        recentErrorMessages.removeAll()
+        return messages
+    }
+
+    private func reportFailure(
+        _ context: String,
+        error: Error
+    ) {
+        let message = "Persistence error: \(context): \(error.localizedDescription)"
+
+        OperationalLogService.shared.error(message)
+        NSLog("Launch Control Center \(message)")
+
+        errorLock.lock()
+        recentErrorMessages.append(message)
+        errorLock.unlock()
+
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .persistenceServiceDidReportError,
+                object: self,
+                userInfo: ["message": message]
+            )
+        }
+    }
+
 }
-
-
