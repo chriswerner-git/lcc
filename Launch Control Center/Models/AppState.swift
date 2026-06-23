@@ -241,6 +241,31 @@ struct ConfigurationImportResult {
     }
 }
 
+struct ConfigurationBackupSnapshot: Identifiable {
+    let id: String
+    let url: URL
+    let fileName: String
+    let createdAt: Date
+    let summary: ConfigurationAuditSummary?
+    let errorMessage: String?
+
+    var isRestorable: Bool {
+        errorMessage == nil && summary != nil
+    }
+
+    var projectName: String {
+        summary?.projectName ?? "Unreadable Backup"
+    }
+
+    var detailLine: String {
+        if let summary {
+            return "Actions: \(summary.actionCount) • Events: \(summary.eventCount) • Schedule Check: \(summary.statusText)"
+        }
+
+        return errorMessage ?? "This backup could not be read."
+    }
+}
+
 // MARK: - Configuration Import Errors
 
 enum ConfigurationImportError: LocalizedError {
@@ -1045,6 +1070,87 @@ final class AppState: ObservableObject {
 
     func currentConfigurationAuditSummary() -> ConfigurationAuditSummary {
         auditSummary(for: currentConfigurationSnapshot())
+    }
+
+    func availableConfigurationBackups() throws -> [ConfigurationBackupSnapshot] {
+        let backupDirectory = try configurationBackupDirectory()
+        let backupFiles = try FileManager.default.contentsOfDirectory(
+            at: backupDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension == "launchcontrol" }
+        .sorted { lhs, rhs in
+            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return lhsDate > rhsDate
+        }
+
+        return backupFiles.map { backupFile in
+            let modifiedDate = (try? backupFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+
+            do {
+                let configuration = try decodeConfiguration(from: backupFile)
+                return ConfigurationBackupSnapshot(
+                    id: backupFile.path,
+                    url: backupFile,
+                    fileName: backupFile.lastPathComponent,
+                    createdAt: configuration.exportedAt,
+                    summary: auditSummary(for: configuration),
+                    errorMessage: nil
+                )
+            } catch {
+                return ConfigurationBackupSnapshot(
+                    id: backupFile.path,
+                    url: backupFile,
+                    fileName: backupFile.lastPathComponent,
+                    createdAt: modifiedDate,
+                    summary: nil,
+                    errorMessage: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    func restoreConfigurationBackup(_ backup: ConfigurationBackupSnapshot) throws -> ConfigurationImportResult {
+        try ensureNoActionsRunningForImport()
+
+        let configuration = try decodeConfiguration(from: backup.url)
+
+        do {
+            try createAutomaticConfigurationBackup(reason: "pre-restore")
+        } catch {
+            logger.error("Automatic pre-restore backup failed: \(error.localizedDescription)")
+            throw ConfigurationImportError.backupFailed(error.localizedDescription)
+        }
+
+        let options = ConfigurationImportOptions(
+            mode: .replaceSelected,
+            importAppPreferences: true,
+            importProjectPreferences: true,
+            importVolumePreferences: true,
+            importActions: true,
+            importEvents: true,
+            importScheduleEnableStates: true
+        )
+
+        let reportLines = try applyConfiguration(
+            configuration,
+            options: options
+        )
+
+        var summary = auditSummary(for: currentConfigurationSnapshot())
+        summary.issues.append(contentsOf: reportLines.map {
+            ConfigurationAuditIssue(severity: .warning, message: $0)
+        })
+
+        lastMessage = "Restored configuration backup: \(backup.fileName)"
+        logger.warning(lastMessage)
+
+        return ConfigurationImportResult(
+            summary: summary,
+            reportLines: reportLines
+        )
     }
 
     private func currentConfigurationSnapshot() -> LaunchControlConfiguration {

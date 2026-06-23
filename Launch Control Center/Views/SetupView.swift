@@ -25,6 +25,9 @@ struct SetupView: View {
     @State private var configurationStatus: String = "No configuration import/export yet."
     @State private var configurationAuditSummary: ConfigurationAuditSummary?
     @State private var resetStatus: String = "No reset actions have been performed."
+    @State private var restoreStatus: String = "No backup restore has been performed."
+    @State private var configurationBackups: [ConfigurationBackupSnapshot] = []
+    @State private var selectedConfigurationBackupID: String?
     @State private var networkInterfaces: [NetworkInterfaceSnapshot] = NetworkInventoryService.currentIPv4Interfaces()
 
     // MARK: - Body
@@ -53,6 +56,7 @@ struct SetupView: View {
             appState.refreshLaunchAtStartupStatus()
             appState.refreshSleepPreventionStatus()
             refreshNetworkInterfaces()
+            refreshConfigurationBackups()
         }
     }
 
@@ -917,6 +921,11 @@ struct SetupView: View {
                configurationAuditSummary.issues.isEmpty == false {
                 configurationAuditCard(for: configurationAuditSummary)
             }
+
+            Divider()
+                .opacity(0.35)
+
+            restoreFromBackupSection
         }
         .padding(14)
         .background(cardBackground)
@@ -979,6 +988,145 @@ struct SetupView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    private var restoreFromBackupSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(LCCDesign.ColorToken.active)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Restore from Automatic Backup")
+                        .font(.subheadline)
+                        .bold()
+
+                    Text("Backups are created automatically before import and reset operations. Restoring creates another backup first.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    refreshConfigurationBackups()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            if configurationBackups.isEmpty {
+                Text("No automatic backups found yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(insetPanelBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(configurationBackups) { backup in
+                        configurationBackupRow(backup)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        restoreSelectedConfigurationBackup()
+                    } label: {
+                        Label("Restore Selected Backup", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(selectedConfigurationBackup?.isRestorable != true)
+                }
+            }
+
+            Text(restoreStatus)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(insetPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(12)
+        .background(insetPanelBackground.opacity(0.62))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func configurationBackupRow(_ backup: ConfigurationBackupSnapshot) -> some View {
+        Button {
+            selectedConfigurationBackupID = backup.id
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: selectedConfigurationBackupID == backup.id ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(selectedConfigurationBackupID == backup.id ? LCCDesign.ColorToken.active : .secondary)
+                    .frame(width: 18, alignment: .center)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(backup.projectName)
+                            .font(.caption)
+                            .bold()
+                            .lineLimit(1)
+
+                        Text(formattedBackupDate(backup.createdAt))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(backup.detailLine)
+                        .font(.caption2)
+                        .foregroundStyle(backup.isRestorable ? .secondary : LCCDesign.ColorToken.error)
+                        .lineLimit(2)
+
+                    Text(backup.fileName)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(selectedConfigurationBackupID == backup.id ? LCCDesign.selectedFill() : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        selectedConfigurationBackupID == backup.id ? LCCDesign.ColorToken.active.opacity(0.35) : LCCDesign.ColorToken.standardBorder,
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(backup.isRestorable == false)
+    }
+
+    private var selectedConfigurationBackup: ConfigurationBackupSnapshot? {
+        configurationBackups.first { $0.id == selectedConfigurationBackupID }
+    }
+
+    private func formattedBackupDate(_ date: Date) -> String {
+        SetupView.backupDateFormatter.string(from: date)
+    }
+
+    private static let backupDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter
+    }()
+
     private func auditCountSummary(for summary: ConfigurationAuditSummary) -> String {
         let errorCount = summary.issues.filter { $0.severity == .error }.count
         let warningCount = summary.issues.filter { $0.severity == .warning }.count
@@ -1015,7 +1163,7 @@ struct SetupView: View {
                         .font(.subheadline)
                         .bold()
 
-                    Text("Each command asks for confirmation before it runs. Deleted Actions and Events cannot be recovered unless you previously exported a configuration backup.")
+                    Text("Each command asks for confirmation before it runs. The app creates an automatic backup before each destructive command, but you should still export important show files before major changes.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1132,6 +1280,7 @@ struct SetupView: View {
             }
 
             resetStatus = operation.successMessage
+            refreshConfigurationBackups()
         } catch {
             resetStatus = "Reset failed: \(error.localizedDescription)"
         }
@@ -1213,10 +1362,63 @@ struct SetupView: View {
             let result = try appState.importConfiguration(from: url, options: options)
             configurationAuditSummary = result.summary
             configurationStatus = "Imported \(url.lastPathComponent). \(result.statusLine)"
+            refreshConfigurationBackups()
         } catch {
             configurationAuditSummary = nil
             configurationStatus = "Import failed: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Restore from Backup
+
+    private func refreshConfigurationBackups() {
+        do {
+            configurationBackups = try appState.availableConfigurationBackups()
+
+            if let selectedConfigurationBackupID,
+               configurationBackups.contains(where: { $0.id == selectedConfigurationBackupID }) == false {
+                self.selectedConfigurationBackupID = configurationBackups.first?.id
+            } else if selectedConfigurationBackupID == nil {
+                selectedConfigurationBackupID = configurationBackups.first?.id
+            }
+        } catch {
+            configurationBackups = []
+            selectedConfigurationBackupID = nil
+            restoreStatus = "Could not load automatic backups: \(error.localizedDescription)"
+        }
+    }
+
+    private func restoreSelectedConfigurationBackup() {
+        guard let backup = selectedConfigurationBackup else {
+            restoreStatus = "Select a backup before restoring."
+            return
+        }
+
+        guard confirmRestore(backup) else {
+            restoreStatus = "Backup restore cancelled."
+            return
+        }
+
+        do {
+            let result = try appState.restoreConfigurationBackup(backup)
+            configurationAuditSummary = result.summary
+            configurationStatus = "Restored \(backup.fileName). \(result.statusLine)"
+            restoreStatus = "Restored \(backup.fileName). A backup of the previous configuration was created first."
+            refreshConfigurationBackups()
+        } catch {
+            restoreStatus = "Restore failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func confirmRestore(_ backup: ConfigurationBackupSnapshot) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Restore Configuration Backup?"
+        alert.informativeText = "This will replace the current show configuration with ‘\(backup.projectName)’ from \(formattedBackupDate(backup.createdAt)). A backup of the current configuration will be created first. This restore cannot be undone except by restoring another backup or importing another configuration file."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Restore Backup")
+        alert.addButton(withTitle: "Cancel")
+
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     // MARK: - Configuration File Helpers
