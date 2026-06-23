@@ -50,7 +50,6 @@ struct DashboardClockView: View {
                 lowerLeftDiagnostics
                     .frame(
                         maxWidth: .infinity,
-                        maxHeight: .infinity,
                         alignment: .bottomLeading
                     )
 
@@ -58,12 +57,13 @@ struct DashboardClockView: View {
                     status: timeDataStatus(for: context.date)
                 )
             }
-            .padding(.vertical, 18)
-            .padding(.horizontal, 16)
+            .padding(.vertical, LCCLayout.Dashboard.clockPanelVerticalPadding)
+            .padding(.horizontal, LCCLayout.Dashboard.clockPanelHorizontalPadding)
             .background(dashboardCardBackground)
             .overlay(dashboardCardBorder)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
+        .frame(height: LCCLayout.Dashboard.clockPanelHeight)
     }
 
     // MARK: - Clock Display
@@ -71,16 +71,25 @@ struct DashboardClockView: View {
     private func clockDisplay(for date: Date) -> some View {
         VStack(spacing: 4) {
             Text(appState.projectName)
-                .font(.caption)
+                .font(.system(
+                    size: LCCLayout.Dashboard.clockProjectNameFontSize,
+                    weight: LCCLayout.Dashboard.clockProjectNameFontWeight,
+                    design: .default
+                ))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .padding(.horizontal, 4)
 
             Text(clockTime(date))
-                .font(.system(size: 42, weight: .semibold, design: .rounded))
+                .font(.system(
+                    size: LCCLayout.Dashboard.clockTimeFontSize,
+                    weight: LCCLayout.Dashboard.clockTimeFontWeight,
+                    design: .default
+                ))
                 .monospacedDigit()
 
             Text("\(dayOfWeek(date)), \(calendarDate(date))")
-                .font(.subheadline)
+                .font(LCCLayout.Dashboard.clockDateFont)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)

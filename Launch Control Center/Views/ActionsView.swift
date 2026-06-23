@@ -42,44 +42,65 @@ struct ActionsView: View {
     // MARK: - Body
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(
-                    min: 300,
-                    ideal: 340,
-                    max: 420
-                )
-        } detail: {
-            detailView
+        ZStack {
+            sidebarBackground
+
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                    .padding(.horizontal, 18)
+                    .padding(.top, 16)
+
+                HStack(alignment: .top, spacing: LCCLayout.Actions.columnSpacing) {
+                    sidebar
+                        .frame(width: LCCLayout.Actions.libraryColumnWidth)
+
+                    detailPanel
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
-        .frame(width: 980, height: 720)
+        .lccWindowPresentation(title: "LCC - Define Actions", metrics: LCCLayout.Window.actions)
     }
 
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        ZStack {
-            sidebarBackground
-
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                createButtons
-                actionList
-            }
-            .padding(18)
+        VStack(alignment: .leading, spacing: LCCLayout.Actions.sectionSpacing) {
+            sidebarHeader
+            createButtons
+            actionList
+                .frame(maxHeight: .infinity)
         }
+        .padding(LCCLayout.Actions.columnPadding)
+        .frame(maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: LCCLayout.Actions.columnCornerRadius, style: .continuous)
+                .fill(LCCDesign.ColorToken.controlBackground.opacity(LCCLayout.Actions.columnBackgroundOpacity))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: LCCLayout.Actions.columnCornerRadius, style: .continuous)
+                .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: LCCLayout.Actions.columnBorderWidth)
+        )
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Actions")
-                .font(.largeTitle)
-                .bold()
+        LCCWindowTopChrome(
+            title: "Define Actions",
+            subtitle: "Create Show and Utility Actions for manual or scheduled playback.",
+            systemImage: "rectangle.stack.badge.play"
+        )
+    }
 
-            Text("\(appState.actionDefinitions.count) total")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+    private var sidebarHeader: some View {
+        LCCSidebarHeader(
+            title: "Action Library",
+            subtitle: "\(appState.actionDefinitions.count) total",
+            systemImage: "filemenu.and.selection",
+            iconColor: LCCDesign.ColorToken.active
+        )
     }
 
     private var createButtons: some View {
@@ -90,7 +111,7 @@ struct ActionsView: View {
                 Label("New Show", systemImage: "play.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
 
             Button {
                 addUtilityAction()
@@ -212,6 +233,21 @@ struct ActionsView: View {
 
     // MARK: - Detail
 
+    private var detailPanel: some View {
+        detailView
+            .padding(LCCLayout.Actions.columnPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: LCCLayout.Actions.columnCornerRadius, style: .continuous)
+                    .fill(LCCDesign.ColorToken.controlBackground.opacity(LCCLayout.Actions.columnBackgroundOpacity))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: LCCLayout.Actions.columnCornerRadius, style: .continuous)
+                    .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: LCCLayout.Actions.columnBorderWidth)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: LCCLayout.Actions.columnCornerRadius, style: .continuous))
+    }
+
     @ViewBuilder
     private var detailView: some View {
         if let selectedActionID {
@@ -224,22 +260,13 @@ struct ActionsView: View {
 
     private var emptyDetailView: some View {
         ZStack {
-            LCCDesign.ColorToken.windowBackground
-                .ignoresSafeArea()
-
-            VStack(spacing: 12) {
-                Image(systemName: "rectangle.stack.badge.play")
-                    .font(.system(size: 44, weight: .regular))
-                    .foregroundStyle(.secondary)
-
-                Text("Select an Action")
-                    .font(.title2)
-                    .bold()
-
-                Text("Choose an Action from the sidebar or create a new one.")
-                    .foregroundStyle(.secondary)
-            }
+            LCCEmptyStateView(
+                title: "Select an Action",
+                message: "Choose an Action from the Action Library or create a new one.",
+                systemImage: "pencil"
+            )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Create Actions

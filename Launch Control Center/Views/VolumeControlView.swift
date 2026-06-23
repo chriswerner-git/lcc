@@ -10,6 +10,7 @@
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
+import Foundation
 import SwiftUI
 
 struct VolumeControlView: View {
@@ -20,7 +21,7 @@ struct VolumeControlView: View {
     // MARK: - Derived State
 
     private var outputValueText: String {
-        appState.formattedVolumeOutputValue(appState.currentVolumeOutputValue)
+        String(format: "%.2f", appState.currentVolumeOutputValue)
     }
 
     private var volumePercent: Int {
@@ -93,7 +94,11 @@ struct VolumeControlView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(outputValueText)
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .font(.system(
+                        size: LCCLayout.Dashboard.volumeOutputFontSize,
+                        weight: LCCLayout.Dashboard.volumeOutputFontWeight,
+                        design: .default
+                    ))
                     .monospacedDigit()
 
                 Text(appState.isMuted ? "Mute level" : "Slider \(volumePercent)%")

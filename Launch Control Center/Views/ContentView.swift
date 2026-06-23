@@ -20,8 +20,8 @@ struct ContentView: View {
 
     // MARK: - Layout Constants
 
-    private let outerPadding: CGFloat = 18
-    private let sectionSpacing: CGFloat = 18
+    private let outerPadding: CGFloat = LCCLayout.Spacing.screenPadding
+    private let sectionSpacing: CGFloat = LCCLayout.Dashboard.sectionSpacing
 
     // MARK: - Body
 
@@ -30,6 +30,8 @@ struct ContentView: View {
             dashboardBackground
 
             VStack(alignment: .leading, spacing: sectionSpacing) {
+                dashboardHeader
+
                 DashboardClockView()
                     .environmentObject(appState)
 
@@ -58,8 +60,18 @@ struct ContentView: View {
             }
             .padding(outerPadding)
         }
-        .frame(minWidth: 900, minHeight: 900)
+        .lccWindowPresentation(title: "LCC - Dashboard", metrics: LCCLayout.Window.dashboard)
         .background(DashboardWindowConfigurator())
+    }
+
+    // MARK: - Header
+
+    private var dashboardHeader: some View {
+        LCCWindowTopChrome(
+            title: "Dashboard",
+            subtitle: "Monitor status, run Actions manually, and review upcoming Events.",
+            systemImage: "rectangle.3.group.fill"
+        )
     }
 
     // MARK: - Styling
@@ -98,7 +110,8 @@ private struct ManualActionButtonsView: View {
     private let buttonSpacing: CGFloat = 8
     private let cardPadding: CGFloat = 14
     private let cardHeaderHeight: CGFloat = 24
-    private let maximumColumnHeight: CGFloat = 245
+    private let minimumColumnHeight: CGFloat = LCCLayout.Dashboard.manualActionsMinimumColumnHeight
+    private let maximumColumnHeight: CGFloat = LCCLayout.Dashboard.manualActionsMaximumColumnHeight
 
     // MARK: - Filtered Actions
 
@@ -135,11 +148,11 @@ private struct ManualActionButtonsView: View {
             )
 
             let targetHeight = min(
-                max(showHeight, utilityHeight),
+                max(showHeight, utilityHeight, minimumColumnHeight),
                 maximumColumnHeight
             )
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: LCCLayout.Dashboard.sectionHeaderSpacing) {
                 sectionHeader
 
                 HStack(alignment: .top, spacing: 14) {
@@ -167,8 +180,8 @@ private struct ManualActionButtonsView: View {
     // MARK: - Section Layout
 
     private var manualSectionHeight: CGFloat {
-        let assumedDashboardWidth: CGFloat = 900
-        let columnWidth = max((assumedDashboardWidth - 36 - 14) / 2, 320)
+        let assumedDashboardContentWidth = LCCLayout.Window.dashboard.defaultWidth - (LCCLayout.Spacing.screenPadding * 2)
+        let columnWidth = max((assumedDashboardContentWidth - 14) / 2, 320)
 
         let showHeight = columnHeight(
             actionCount: showActions.count,
@@ -181,11 +194,11 @@ private struct ManualActionButtonsView: View {
         )
 
         let targetHeight = min(
-            max(showHeight, utilityHeight),
+            max(showHeight, utilityHeight, minimumColumnHeight),
             maximumColumnHeight
         )
 
-        return 28 + 10 + targetHeight
+        return 28 + LCCLayout.Dashboard.sectionHeaderSpacing + targetHeight
     }
 
     private var sectionHeader: some View {

@@ -49,7 +49,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var dashboardWindow: some Scene {
-        Window("Dashboard", id: "Dashboard") {
+        Window("LCC - Dashboard", id: "Dashboard") {
             ContentView()
                 .environmentObject(appState)
                 .onAppear {
@@ -60,61 +60,93 @@ struct Launch_Control_CenterApp: App {
                     appState.setDashboardWindowIsOpen(false)
                 }
         }
-        .defaultSize(width: 1400, height: 1030)
+        .defaultSize(
+            width: LCCLayout.Window.dashboard.defaultWidth,
+            height: LCCLayout.Window.dashboard.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var scheduleWindow: some Scene {
-        Window("Schedule", id: "schedule-window") {
+        Window("LCC - Schedule", id: "schedule-window") {
             ScheduleCalendarView()
                 .environmentObject(appState)
         }
-        .defaultSize(width: 1200, height: 760)
+        .defaultSize(
+            width: LCCLayout.Window.schedule.defaultWidth,
+            height: LCCLayout.Window.schedule.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var actionsWindow: some Scene {
-        Window("Actions", id: "actions-window") {
+        Window("LCC - Define Actions", id: "actions-window") {
             ActionsView()
                 .environmentObject(appState)
         }
-        .defaultSize(width: 980, height: 720)
+        .defaultSize(
+            width: LCCLayout.Window.actions.defaultWidth,
+            height: LCCLayout.Window.actions.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var eventEditorWindow: some Scene {
-        Window("Add Event", id: "event-editor-window") {
+        Window("LCC - Add Events", id: "event-editor-window") {
             EventEditorView()
                 .environmentObject(appState)
         }
-        .defaultSize(width: 680, height: 700)
+        .defaultSize(
+            width: LCCLayout.Window.eventEditor.defaultWidth,
+            height: LCCLayout.Window.eventEditor.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var setupWindow: some Scene {
-        Window("Setup", id: "setup-window") {
+        Window("LCC - Preferences", id: "setup-window") {
             SetupView()
                 .environmentObject(appState)
         }
-        .defaultSize(width: 840, height: 720)
+        .defaultSize(
+            width: LCCLayout.Window.preferences.defaultWidth,
+            height: LCCLayout.Window.preferences.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var testingWindow: some Scene {
-        Window("UDP Test", id: "testing-window") {
+        Window("LCC - UDP Test", id: "testing-window") {
             TestingView()
                 .environmentObject(appState)
         }
-        .defaultSize(width: 660, height: 640)
+        .defaultSize(
+            width: LCCLayout.Window.testing.defaultWidth,
+            height: LCCLayout.Window.testing.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var aboutWindow: some Scene {
-        Window("About Launch Control Center", id: "about-lcc-window") {
+        Window("LCC - About", id: "about-lcc-window") {
             AboutLaunchControlCenterView()
         }
-        .defaultSize(width: 560, height: 760)
+        .defaultSize(
+            width: LCCLayout.Window.about.defaultWidth,
+            height: LCCLayout.Window.about.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var helpWindow: some Scene {
-        Window("Launch Control Center Help", id: "help-lcc-window") {
+        Window("LCC - Help", id: "help-lcc-window") {
             HelpLCCView()
         }
-        .defaultSize(width: 680, height: 760)
+        .defaultSize(
+            width: LCCLayout.Window.help.defaultWidth,
+            height: LCCLayout.Window.help.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 
     private var menuBarExtra: some Scene {
@@ -148,15 +180,13 @@ struct Launch_Control_CenterApp: App {
         Group {
             CommandGroup(replacing: .appInfo) {
                 Button("About Launch Control Center") {
-                    openWindow(id: "about-lcc-window")
-                    activateApp()
+                    openAppWindow(id: "about-lcc-window", title: "LCC - About")
                 }
             }
 
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences…") {
-                    openWindow(id: "setup-window")
-                    activateApp()
+                    openAppWindow(id: "setup-window", title: "LCC - Preferences")
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
@@ -174,40 +204,34 @@ struct Launch_Control_CenterApp: App {
     private var navigationCommands: some Commands {
         CommandMenu("Launch Control") {
             Button("Dashboard") {
-                openWindow(id: "Dashboard")
-                activateApp()
+                openAppWindow(id: "Dashboard", title: "LCC - Dashboard")
             }
             .keyboardShortcut("1", modifiers: [.command])
 
             Button("Schedule") {
-                openWindow(id: "schedule-window")
-                activateApp()
+                openAppWindow(id: "schedule-window", title: "LCC - Schedule")
             }
             .keyboardShortcut("2", modifiers: [.command])
 
             Button("Define Actions") {
-                openWindow(id: "actions-window")
-                activateApp()
+                openAppWindow(id: "actions-window", title: "LCC - Define Actions")
             }
             .keyboardShortcut("3", modifiers: [.command])
 
             Button("Add Events") {
-                openWindow(id: "event-editor-window")
-                activateApp()
+                openAppWindow(id: "event-editor-window", title: "LCC - Add Events")
             }
             .keyboardShortcut("4", modifiers: [.command])
 
             Button("UDP Tests") {
-                openWindow(id: "testing-window")
-                activateApp()
+                openAppWindow(id: "testing-window", title: "LCC - UDP Test")
             }
             .keyboardShortcut("5", modifiers: [.command])
 
             Divider()
 
             Button("Preferences…") {
-                openWindow(id: "setup-window")
-                activateApp()
+                openAppWindow(id: "setup-window", title: "LCC - Preferences")
             }
             .keyboardShortcut(",", modifiers: .command)
 
@@ -217,13 +241,11 @@ struct Launch_Control_CenterApp: App {
             }
 
             Button("About Launch Control Center") {
-                openWindow(id: "about-lcc-window")
-                activateApp()
+                openAppWindow(id: "about-lcc-window", title: "LCC - About")
             }
 
             Button("Launch Control Center Help") {
-                openWindow(id: "help-lcc-window")
-                activateApp()
+                openAppWindow(id: "help-lcc-window", title: "LCC - Help")
             }
             .keyboardShortcut("/", modifiers: [.command])
         }
@@ -234,14 +256,18 @@ struct Launch_Control_CenterApp: App {
     private var helpCommands: some Commands {
         CommandGroup(replacing: .help) {
             Button("Launch Control Center Help") {
-                openWindow(id: "help-lcc-window")
-                activateApp()
+                openAppWindow(id: "help-lcc-window", title: "LCC - Help")
             }
             .keyboardShortcut("/", modifiers: [.command])
         }
     }
 
     // MARK: - App Activation
+
+    private func openAppWindow(id: String, title: String) {
+        openWindow(id: id)
+        LCCWindowActivation.bringWindowToFront(matchingTitle: title)
+    }
 
     private func activateApp() {
         NSApplication.shared.activate(ignoringOtherApps: true)

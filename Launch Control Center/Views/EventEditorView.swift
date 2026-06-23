@@ -141,7 +141,7 @@ struct EventEditorView: View {
             }
             .padding(16)
         }
-        .frame(width: 1040, height: 820)
+        .lccWindowPresentation(title: "LCC - Add Events", metrics: LCCLayout.Window.eventEditor)
         .onAppear {
             initializeEditor()
         }
@@ -182,29 +182,13 @@ struct EventEditorView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(LCCDesign.selectedFill())
-                    .frame(width: 34, height: 34)
-
-                Image(systemName: "calendar.badge.plus")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(LCCDesign.ColorToken.active)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Add Event")
-                    .font(.title)
-                    .bold()
-
-                Text("Schedule an Action to run automatically.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
+        LCCWindowTopChrome(
+            title: "Add Events",
+            subtitle: "Schedule an Action to run automatically.",
+            systemImage: "calendar.badge.plus",
+            iconSize: LCCLayout.Size.smallHeaderIcon,
+            titleFont: .title
+        )
     }
 
     // MARK: - Action Card
@@ -216,7 +200,7 @@ struct EventEditorView: View {
                 subtitle: "Choose what this Event will run."
             )
 
-            HStack(spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
                 Picker("Action", selection: $selectedActionID) {
                     ForEach(sortedActions) { action in
                         Text("\(action.name) — \(action.type.rawValue)")
@@ -224,15 +208,17 @@ struct EventEditorView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: .infinity)
+                .frame(width: 260, alignment: .leading)
+
+                if let selectedAction {
+                    selectedActionSummary(for: selectedAction)
+                }
+
+                Spacer(minLength: 0)
 
                 if let selectedAction {
                     actionTypePill(selectedAction.type)
                 }
-            }
-
-            if let selectedAction {
-                selectedActionSummary(for: selectedAction)
             }
         }
         .padding(10)
@@ -244,17 +230,14 @@ struct EventEditorView: View {
     private func selectedActionSummary(for action: ActionDefinition) -> some View {
         HStack(spacing: 8) {
             Image(systemName: action.type == .show ? "play.fill" : "bolt.fill")
+                .font(.caption)
                 .foregroundStyle(actionColor(for: action.type))
 
             Text(actionSummary(for: action))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
-            Spacer()
+                .lineLimit(1)
         }
-        .padding(8)
-        .background(insetPanelBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func actionSummary(for action: ActionDefinition) -> String {
@@ -792,24 +775,14 @@ struct EventEditorView: View {
 
     private var seriesNameField: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Text("Series Name")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Text("Series Name")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                Text("Optional")
-                    .font(.caption2)
-                    .bold()
-                    .foregroundStyle(LCCDesign.ColorToken.active)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(LCCDesign.selectedFill(opacity: 0.14)))
-            }
-
-            TextField("For example: Daily Loop or Six Times Per Hour", text: $seriesName)
+            TextField("ex: Daily Loop or Morning Startup", text: $seriesName)
                 .textFieldStyle(.roundedBorder)
 
-            Text("This can be left blank. Launch Control Center uses a hidden series identifier under the hood.")
+            Text("Optional. Can be left blank.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

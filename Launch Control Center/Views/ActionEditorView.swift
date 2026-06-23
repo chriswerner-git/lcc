@@ -32,28 +32,32 @@ struct ActionEditorView: View {
     // MARK: - Body
 
     var body: some View {
-        ZStack {
-            editorBackground
-
-            VStack(alignment: .leading, spacing: 16) {
-                if let index = actionIndex {
+        Group {
+            if let index = actionIndex {
+                VStack(alignment: .leading, spacing: LCCLayout.Actions.editorContentSpacing) {
                     editorHeader(index: index)
-                    actionDetailsCard(index: index)
 
-                    switch appState.actionDefinitions[index].type {
-                    case .show:
-                        showStepsSection(index: index)
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: LCCLayout.Actions.editorContentSpacing) {
+                            actionDetailsCard(index: index)
 
-                    case .utility:
-                        utilityStepsSection(index: index)
+                            switch appState.actionDefinitions[index].type {
+                            case .show:
+                                showStepsSection(index: index)
+
+                            case .utility:
+                                utilityStepsSection(index: index)
+                            }
+                        }
+                        .padding(.trailing, LCCLayout.Actions.editorScrollTrailingPadding)
                     }
-                } else {
-                    missingActionView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            } else {
+                missingActionView
             }
-            .padding(20)
         }
-        .frame(minWidth: 800, minHeight: 760)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Header
@@ -61,26 +65,13 @@ struct ActionEditorView: View {
     private func editorHeader(index: Int) -> some View {
         let action = appState.actionDefinitions[index]
 
-        return HStack(alignment: .center, spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(actionColor(for: action.type).opacity(0.18))
-                    .frame(width: 38, height: 38)
-
-                Image(systemName: action.type == .show ? "play.fill" : "bolt.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(actionColor(for: action.type))
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Edit Action")
-                    .font(.largeTitle)
-                    .bold()
-
-                Text(action.type == .show ? "Show Action · Message steps" : "Utility Action · Dashboard automation")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        return HStack(alignment: .top, spacing: 12) {
+            LCCSidebarHeader(
+                title: "Edit Action",
+                subtitle: action.type == .show ? "Show Action · Message steps" : "Utility Action · Dashboard automation",
+                systemImage: "pencil",
+                iconColor: LCCDesign.ColorToken.active
+            )
 
             Spacer()
 
@@ -90,7 +81,7 @@ struct ActionEditorView: View {
                 Label("Run Now", systemImage: "play.fill")
                     .padding(.horizontal, 4)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(actionHasNoSteps(index: index))
         }
@@ -99,16 +90,16 @@ struct ActionEditorView: View {
     // MARK: - Action Details
 
     private func actionDetailsCard(index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Action")
-                    .font(.headline)
+        let action = appState.actionDefinitions[index]
 
-                Text("Manual runs ignore schedule enable/disable toggles.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
+        return VStack(alignment: .leading, spacing: 14) {
+            stepCardHeader(
+                iconName: actionIconName(for: action.type),
+                iconColor: actionColor(for: action.type),
+                title: "Action",
+                subtitle: "Manual runs ignore schedule enable/disable toggles."
+            ) {
+                EmptyView()
             }
 
             HStack(alignment: .top, spacing: 14) {
@@ -139,7 +130,7 @@ struct ActionEditorView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .frame(width: 250)
+                    .frame(width: LCCLayout.Actions.typePickerWidth)
                 }
             }
 
@@ -244,12 +235,12 @@ struct ActionEditorView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             stepCardHeader(
-                iconName: command.wrappedValue.messageType.systemImage,
+                iconName: "paperplane.fill",
                 iconColor: LCCDesign.ColorToken.active,
                 title: "Message Step \(stepIndex + 1)",
                 subtitle: command.wrappedValue.name
             ) {
-                HStack(spacing: 10) {
+                HStack(spacing: LCCLayout.Actions.delaySendButtonSpacing) {
                     inlineDelayField(delaySeconds: command.delaySeconds)
 
                     Button {
@@ -330,52 +321,54 @@ struct ActionEditorView: View {
     }
 
     private func standardUDPConfiguration(command: Binding<UDPCommand>) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                labeledTextField(
-                    label: "Destination IP Address",
-                    placeholder: "127.0.0.1",
-                    text: command.host
-                )
+        HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
+            labeledTextField(
+                label: "Destination IP Address",
+                placeholder: "127.0.0.1",
+                text: command.host
+            )
+            .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
 
-                labeledIntegerField(
-                    label: "Port",
-                    value: command.port,
-                    width: 120
-                )
-            }
+            labeledIntegerField(
+                label: "Port",
+                value: command.port,
+                width: LCCLayout.Actions.portFieldWidth
+            )
 
             labeledTextField(
                 label: "UDP Message",
                 placeholder: "UDP Message",
                 text: command.message
             )
+            .frame(maxWidth: .infinity)
         }
     }
 
     private func syslogConfiguration(command: Binding<UDPCommand>) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
                 labeledTextField(
                     label: "Destination IP Address",
                     placeholder: "127.0.0.1",
                     text: command.host
                 )
+                .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
 
                 labeledIntegerField(
                     label: "Port",
                     value: command.port,
-                    width: 120
+                    width: LCCLayout.Actions.portFieldWidth
                 )
 
                 syslogSeverityPicker(severity: command.syslogSeverity)
-            }
 
-            labeledTextField(
-                label: "Syslog Message",
-                placeholder: "Syslog Message",
-                text: command.message
-            )
+                labeledTextField(
+                    label: "Syslog Message",
+                    placeholder: "Syslog Message",
+                    text: command.message
+                )
+                .frame(maxWidth: .infinity)
+            }
 
             syslogPreview(command: command.wrappedValue)
         }
@@ -393,7 +386,7 @@ struct ActionEditorView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 150)
+            .frame(width: LCCLayout.Actions.severityFieldWidth)
         }
     }
 
@@ -616,26 +609,26 @@ struct ActionEditorView: View {
     }
 
     private func utilityUDPConfiguration(command: Binding<UtilityCommand>) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                labeledTextField(
-                    label: "Destination IP Address",
-                    placeholder: "127.0.0.1",
-                    text: command.udpHost
-                )
+        HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
+            labeledTextField(
+                label: "Destination IP Address",
+                placeholder: "127.0.0.1",
+                text: command.udpHost
+            )
+            .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
 
-                labeledIntegerField(
-                    label: "Port",
-                    value: command.udpPort,
-                    width: 120
-                )
-            }
+            labeledIntegerField(
+                label: "Port",
+                value: command.udpPort,
+                width: LCCLayout.Actions.portFieldWidth
+            )
 
             labeledTextField(
                 label: "UDP Message",
                 placeholder: "UDP Message",
                 text: command.udpMessage
             )
+            .frame(maxWidth: .infinity)
         }
         .padding(12)
         .background(insetPanelBackground)
@@ -785,14 +778,10 @@ struct ActionEditorView: View {
                 .buttonStyle(.bordered)
             }
 
-            ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    content()
-                }
-                .padding(.vertical, 2)
-                .padding(.trailing, 6)
+            LazyVStack(alignment: .leading, spacing: 14) {
+                content()
             }
-            .frame(maxHeight: .infinity)
+            .padding(.vertical, 2)
         }
     }
 
@@ -834,10 +823,13 @@ struct ActionEditorView: View {
             ZStack {
                 Circle()
                     .fill(iconColor.opacity(0.18))
-                    .frame(width: 30, height: 30)
+                    .frame(
+                        width: LCCLayout.Actions.stepHeaderIconSize,
+                        height: LCCLayout.Actions.stepHeaderIconSize
+                    )
 
                 Image(systemName: iconName)
-                    .font(.caption)
+                    .font(.system(size: LCCLayout.Actions.stepHeaderIconSymbolSize, weight: .semibold))
                     .foregroundStyle(iconColor)
             }
 
@@ -975,6 +967,16 @@ struct ActionEditorView: View {
 
     private func actionColor(for type: ActionType) -> Color {
         LCCDesign.actionColor(for: type)
+    }
+
+    private func actionIconName(for type: ActionType) -> String {
+        switch type {
+        case .show:
+            return "play.fill"
+
+        case .utility:
+            return "bolt.fill"
+        }
     }
 
     private func iconName(for kind: UtilityCommandKind) -> String {

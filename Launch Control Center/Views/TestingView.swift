@@ -37,7 +37,7 @@ private struct TestingContentView: View {
 
     // MARK: - State
 
-    @State private var testMessage: String = "Hello from Launch Control Center"
+    @State private var testMessage: String = "Hello World!"
 
     // MARK: - Body
 
@@ -47,15 +47,15 @@ private struct TestingContentView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 header
-                listenerCard
+                statusCard
                 sendCard
-                statusCards
+                listenerCard
 
                 Spacer(minLength: 0)
             }
             .padding(16)
         }
-        .frame(width: 660, height: 640)
+        .lccWindowPresentation(title: "LCC - UDP Test", metrics: LCCLayout.Window.testing)
         .alert(
             "UDP Listener Stopped",
             isPresented: automaticStopAlertIsPresented
@@ -84,29 +84,13 @@ private struct TestingContentView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(LCCDesign.selectedFill())
-                    .frame(width: 34, height: 34)
-
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(LCCDesign.ColorToken.active)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("UDP Test")
-                    .font(.title)
-                    .bold()
-
-                Text("Diagnostics for confirming send and receive behavior.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
+        LCCWindowTopChrome(
+            title: "UDP Test",
+            subtitle: "Send and receive test UDP messages using the current project defaults.",
+            systemImage: "antenna.radiowaves.left.and.right",
+            iconSize: LCCLayout.Size.smallHeaderIcon,
+            titleFont: .title
+        )
     }
 
     // MARK: - Listener
@@ -137,7 +121,7 @@ private struct TestingContentView: View {
                     Label("Start Listening", systemImage: "dot.radiowaves.left.and.right")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .disabled(startListeningDisabled)
 
                 Button {
@@ -205,7 +189,7 @@ private struct TestingContentView: View {
                 .foregroundStyle(.secondary)
 
             if let listeningPort = udpService.listeningPort {
-                Text("Active Port: \(listeningPort)")
+                Text("Active Port: \(String(describing: listeningPort))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -300,43 +284,31 @@ private struct TestingContentView: View {
 
             HStack(alignment: .top, spacing: 12) {
                 labeledTextField(
-                    label: "Destination Host",
+                    label: "Destination IP Address",
                     text: $appState.defaultDestinationHost
                 )
+                .frame(width: 165)
 
                 labeledNumberField(
-                    label: "Destination Port",
+                    label: "Port",
                     value: $appState.defaultDestinationPort,
-                    width: 140
+                    width: 92
                 )
+
+                labeledTextField(
+                    label: "Message",
+                    text: $testMessage
+                )
+                .frame(maxWidth: .infinity)
             }
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Message")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextField("Message", text: $testMessage)
-                    .textFieldStyle(.roundedBorder)
+            Button {
+                sendTestMessage()
+            } label: {
+                Label("Send UDP Message", systemImage: "paperplane.fill")
+                    .frame(maxWidth: .infinity)
             }
-
-            HStack(spacing: 10) {
-                Button {
-                    sendTestMessage()
-                } label: {
-                    Label("Send UDP Message", systemImage: "paperplane.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button {
-                    appState.defaultDestinationPort = appState.incomingUDPPort
-                } label: {
-                    Label("Use Listener Port", systemImage: "arrow.down.to.line")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
+            .buttonStyle(.bordered)
 
             Text("For loopback testing, use destination host 127.0.0.1 and send to the same port the listener is using.")
                 .font(.caption)
@@ -351,23 +323,30 @@ private struct TestingContentView: View {
 
     // MARK: - Status
 
-    private var statusCards: some View {
+    private var statusCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            compactStatusCard(
-                title: "Send Status",
+            statusSection(
+                title: "Last UDP Message Sent",
                 systemImage: "paperplane",
                 text: udpService.lastSendStatus
             )
 
-            compactStatusCard(
-                title: "Last Received UDP Message",
+            Divider()
+                .overlay(LCCDesign.ColorToken.standardBorder)
+
+            statusSection(
+                title: "Last UDP Message Received",
                 systemImage: "tray.and.arrow.down",
                 text: udpService.lastReceivedMessage
             )
         }
+        .padding(12)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private func compactStatusCard(
+    private func statusSection(
         title: String,
         systemImage: String,
         text: String
@@ -395,10 +374,6 @@ private struct TestingContentView: View {
                 .background(insetPanelBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .padding(12)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     // MARK: - Field Helpers

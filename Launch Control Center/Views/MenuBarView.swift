@@ -22,16 +22,24 @@ struct MenuBarView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             headerSection
 
             Divider()
 
-            navigationSection
+            dashboardSection
 
             Divider()
 
-            helpSection
+            scheduleSection
+
+            Divider()
+
+            testingSection
+
+            Divider()
+
+            supportSection
 
             Divider()
 
@@ -68,62 +76,82 @@ struct MenuBarView: View {
         }
     }
 
-    // MARK: - Navigation
+    // MARK: - Dashboard
 
-    private var navigationSection: some View {
+    private var dashboardSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             menuButton(
                 title: "Dashboard",
                 systemImage: "rectangle.grid.1x2",
-                windowID: "Dashboard"
+                windowID: "Dashboard",
+                windowTitle: "LCC - Dashboard"
             )
+        }
+    }
 
+    // MARK: - Schedule / Actions
+
+    private var scheduleSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
             menuButton(
                 title: "Schedule",
                 systemImage: "calendar",
-                windowID: "schedule-window"
+                windowID: "schedule-window",
+                windowTitle: "LCC - Schedule"
             )
 
             menuButton(
                 title: "Define Actions",
                 systemImage: "rectangle.stack.badge.play",
-                windowID: "actions-window"
+                windowID: "actions-window",
+                windowTitle: "LCC - Define Actions"
             )
 
             menuButton(
                 title: "Add Events",
                 systemImage: "calendar.badge.plus",
-                windowID: "event-editor-window"
-            )
-
-            menuButton(
-                title: "UDP Tests",
-                systemImage: "network",
-                windowID: "testing-window"
-            )
-
-            menuButton(
-                title: "Preferences",
-                systemImage: "gearshape",
-                windowID: "setup-window"
+                windowID: "event-editor-window",
+                windowTitle: "LCC - Add Events"
             )
         }
     }
 
-    // MARK: - Help / About
+    // MARK: - UDP Testing
 
-    private var helpSection: some View {
+    private var testingSection: some View {
         VStack(alignment: .leading, spacing: 8) {
+            menuButton(
+                title: "UDP Testing",
+                systemImage: "antenna.radiowaves.left.and.right",
+                windowID: "testing-window",
+                windowTitle: "LCC - UDP Test"
+            )
+        }
+    }
+
+    // MARK: - Preferences / Help / About
+
+    private var supportSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            menuButton(
+                title: "Preferences",
+                systemImage: "gearshape",
+                windowID: "setup-window",
+                windowTitle: "LCC - Preferences"
+            )
+
             menuButton(
                 title: "Help",
                 systemImage: "questionmark.circle",
-                windowID: "help-lcc-window"
+                windowID: "help-lcc-window",
+                windowTitle: "LCC - Help"
             )
 
             menuButton(
                 title: "About LCC",
                 systemImage: "info.circle",
-                windowID: "about-lcc-window"
+                windowID: "about-lcc-window",
+                windowTitle: "LCC - About"
             )
         }
     }
@@ -144,10 +172,12 @@ struct MenuBarView: View {
     private func menuButton(
         title: String,
         systemImage: String,
-        windowID: String
+        windowID: String,
+        windowTitle: String
     ) -> some View {
         Button {
             openWindow(id: windowID)
+            LCCWindowActivation.bringWindowToFront(matchingTitle: windowTitle)
         } label: {
             Label(title, systemImage: systemImage)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -50,35 +50,18 @@ struct AboutLaunchControlCenterView: View {
             }
             .padding(22)
         }
-        .frame(width: 560, height: 760)
+        .lccWindowPresentation(title: "LCC - About", metrics: LCCLayout.Window.about)
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(LCCDesign.selectedFill())
-                    .frame(width: 54, height: 54)
-
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 23, weight: .semibold))
-                    .foregroundStyle(LCCDesign.ColorToken.active)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Launch Control Center")
-                    .font(.largeTitle)
-                    .bold()
-
-                Text("by Lunar Telephone Company")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
+        LCCWindowTopChrome(
+            title: "About",
+            subtitle: "Version, copyright, and operational context.",
+            systemImage: "paperplane.fill",
+            iconSize: 54
+        )
     }
 
     // MARK: - Cards
@@ -181,15 +164,6 @@ struct AboutLaunchControlCenterView: View {
                     .padding(.trailing, 8)
             }
             .frame(height: 118)
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(LCCDesign.ColorToken.textBackground.opacity(0.18))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
-            )
         }
         .padding(14)
         .background(cardBackground)
@@ -236,23 +210,23 @@ struct AboutLaunchControlCenterView: View {
 
     private var disclaimerText: String {
         """
-        Launch Control Center is provided as an operator-assist tool for triggering configured Actions and scheduled Events. Operators remain responsible for verifying system behavior, show conditions, network configuration, timing, and connected equipment before use.
+        Launch Control Center is an operator-assist tool for configuring and triggering Actions and scheduled Events. Operators are responsible for verifying all Actions, schedules, network settings, connected systems, venue conditions, and show behavior before rehearsal, public operation, or production use.
 
-        Lunar Telephone Company is not responsible for unintended operation, missed cues, network failures, equipment behavior, or damages resulting from misconfiguration or use in production environments.
+        Lunar Telephone Company is not responsible for unintended operation, missed cues, incorrect timing, network failures, equipment behavior, data loss, show interruption, or damages resulting from configuration errors, connected-system behavior, or use in production environments.
         """
     }
 
     private var licenseText: String {
         """
-        Launch Control Center is licensed for use as an operator-assist configuration and playback utility. Use of this software is at the operator’s own risk.
+        Launch Control Center is licensed for use as an operator-assist configuration, scheduling, and playback utility. Use of this software is at the operator’s own risk.
 
-        This software is provided “as is,” without warranty of any kind, express or implied. Lunar Telephone Company does not warrant that the software will be uninterrupted, error-free, suitable for any specific production environment, or compatible with all networks, control systems, or connected devices.
+        This software is provided “as is,” without warranty of any kind, express or implied. Lunar Telephone Company does not warrant that the software will be uninterrupted, error-free, suitable for any specific production environment, or compatible with all networks, control systems, connected devices, or operating conditions.
 
-        Operators are responsible for testing all Actions, scheduled Events, UDP messages, connected systems, and show-control behavior before use in any rehearsal, public operation, or production environment.
+        Operators are responsible for testing all Actions, scheduled Events, UDP messages, configuration files, connected systems, and show-control behavior before use in rehearsal, public operation, or production environments.
 
         The software, interface design, workflows, configuration structure, documentation, and related materials are the intellectual property of Lunar Telephone Company. No portion may be copied, redistributed, modified, reverse engineered, sublicensed, or used to create derivative software without prior written permission.
 
-        In no event shall Lunar Telephone Company be liable for lost profits, missed cues, show interruption, equipment damage, data loss, network failures, incidental damages, consequential damages, or any other claims arising from use or inability to use this software.
+        To the maximum extent permitted by law, Lunar Telephone Company shall not be liable for lost profits, missed cues, show interruption, equipment damage, data loss, network failures, incidental damages, consequential damages, or claims arising from use of, or inability to use, this software.
 
         For questions, support, licensing, or permissions, contact missioncontrol@lunartelephone.com.
         """

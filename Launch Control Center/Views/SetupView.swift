@@ -31,16 +31,22 @@ struct SetupView: View {
         ZStack {
             setupBackground
 
-            HStack(spacing: 0) {
-                sidebar
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
 
-                Divider()
-                    .opacity(0.35)
+                HStack(spacing: 0) {
+                    sidebar
 
-                contentPanel
+                    Divider()
+                        .opacity(0.35)
+
+                    contentPanel
+                }
             }
         }
-        .frame(width: 840, height: 720)
+        .lccWindowPresentation(title: "LCC - Preferences", metrics: LCCLayout.Window.preferences)
         .onAppear {
             appState.refreshLaunchAtStartupStatus()
             appState.refreshSleepPreventionStatus()
@@ -59,6 +65,16 @@ struct SetupView: View {
             endPoint: .bottom
         )
         .ignoresSafeArea()
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        LCCWindowTopChrome(
+            title: "Preferences",
+            subtitle: "Configure project settings, app preferences, import/export, and reset options.",
+            systemImage: "gearshape.fill"
+        )
     }
 
     // MARK: - Sidebar
@@ -84,19 +100,19 @@ struct SetupView: View {
     }
 
     private var sidebarHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(LCCDesign.selectedFill())
+                    .fill(LCCDesign.ColorToken.active.opacity(0.18))
                     .frame(width: 42, height: 42)
 
-                Image(systemName: "gearshape.fill")
+                Image(systemName: "sidebar.left")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(LCCDesign.ColorToken.active)
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Preferences")
+                Text("Settings")
                     .font(.title2)
                     .bold()
 
@@ -104,6 +120,8 @@ struct SetupView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Spacer(minLength: 0)
         }
         .padding(.bottom, 4)
     }
@@ -117,7 +135,7 @@ struct SetupView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .frame(width: 18)
 
-                Text(category.rawValue)
+                Text(category.sidebarTitle)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
 
@@ -156,10 +174,8 @@ struct SetupView: View {
                         appPreferencesCard
 
                     case .projectPreferences:
-                        projectCard
-                        projectNotesCard
-                        volumeUDPOutputCard
-                        volumePresetsCard
+                        projectPreferencesCard
+                        volumeControlCard
 
                     case .importExport:
                         configurationBackupCard
@@ -191,7 +207,7 @@ struct SetupView: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(selectedCategory.rawValue)
+                Text(selectedCategory.contentTitle)
                     .font(.largeTitle)
                     .bold()
 
@@ -212,6 +228,21 @@ struct SetupView: View {
                 title: "App Preferences",
                 subtitle: "Controls application behavior and display."
             )
+
+            preferenceRow(
+                systemImage: "desktopcomputer",
+                title: "Device Name",
+                subtitle: "Hostname used inside generated Syslog messages."
+            ) {
+                TextField(
+                    "Device Name",
+                    text: $appState.syslogDeviceName
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 220)
+            }
+
+            setupDivider
 
             preferenceRow(
                 systemImage: "clock.fill",
@@ -245,22 +276,11 @@ struct SetupView: View {
                 .frame(width: 180)
             }
 
-            preferenceRow(
-                systemImage: "desktopcomputer",
-                title: "Syslog Device Name",
-                subtitle: "Hostname used inside generated Syslog messages."
-            ) {
-                TextField(
-                    "Device Name",
-                    text: $appState.syslogDeviceName
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 220)
-            }
+            setupDivider
 
             preferenceRow(
                 systemImage: "dock.rectangle",
-                title: "Dock Icon",
+                title: "Dock Icon Visibility",
                 subtitle: appState.dockIconVisibilityPreference.preferenceDescription
             ) {
                 Picker(
@@ -316,6 +336,8 @@ struct SetupView: View {
                 .toggleStyle(.switch)
             }
 
+            setupDivider
+
             preferenceRow(
                 systemImage: "clock.arrow.circlepath",
                 title: "Operational Log Retention",
@@ -356,6 +378,8 @@ struct SetupView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
+
+            setupDivider
 
             Text("Syslog Device Name and Dock Icon visibility are stored on this Mac and are not included in configuration import/export. This allows each playback or control computer to identify itself independently.")
                 .font(.caption)
@@ -416,37 +440,28 @@ struct SetupView: View {
 
     // MARK: - Project Preferences
 
-    private var projectCard: some View {
+    private var projectPreferencesCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
                 title: "Project",
-                subtitle: "Name shown across Dashboard and menu bar."
+                subtitle: "Identity and operator notes for this project."
             )
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Project Name")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 TextField("Project Name", text: $appState.projectName)
                     .textFieldStyle(.roundedBorder)
-            }
-        }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
 
-    private var projectNotesCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(
-                title: "Project Notes",
-                subtitle: "Internal notes for operators, context, reminders, or handoff details."
-            )
+                Text("Shown across the Dashboard and menu bar.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Notes")
+                Text("Project Notes")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -463,7 +478,7 @@ struct SetupView: View {
                             .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
                     )
 
-                Text("Stored with this project and included in configuration import/export.")
+                Text("Internal notes for operators, reminders, or handoff context. Stored with this project and included in configuration import/export.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -474,9 +489,26 @@ struct SetupView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    // MARK: - Volume UDP Output
+    private var volumeControlCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeader(
+                title: "Volume Control",
+                subtitle: "UDP output and Dashboard preset levels."
+            )
 
-    private var volumeUDPOutputCard: some View {
+            volumeUDPOutputSection
+
+            setupDivider
+
+            volumePresetsSection
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var volumeUDPOutputSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
                 title: "Volume UDP Output",
@@ -543,10 +575,6 @@ struct SetupView: View {
 
             volumeOutputPreview
         }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var volumeOutputPreview: some View {
@@ -587,9 +615,7 @@ struct SetupView: View {
         }
     }
 
-    // MARK: - Volume Presets
-
-    private var volumePresetsCard: some View {
+    private var volumePresetsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
                 title: "Volume Presets",
@@ -617,10 +643,6 @@ struct SetupView: View {
                 value: $appState.highVolumeLevel
             )
         }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func volumePresetRow(
@@ -1121,6 +1143,12 @@ struct SetupView: View {
 
     // MARK: - Shared UI
 
+    private var setupDivider: some View {
+        Divider()
+            .opacity(0.42)
+            .padding(.vertical, 2)
+    }
+
     private func sectionHeader(
         title: String,
         subtitle: String
@@ -1159,13 +1187,45 @@ struct SetupView: View {
 // MARK: - Setup Category
 
 private enum SetupCategory: String, CaseIterable, Identifiable {
-    case appPreferences = "App Preferences"
-    case projectPreferences = "Project Preferences"
-    case importExport = "Import / Export"
-    case resetDefaults = "Reset / Defaults"
+    case appPreferences
+    case projectPreferences
+    case importExport
+    case resetDefaults
 
     var id: String {
-        rawValue
+        sidebarTitle
+    }
+
+    var sidebarTitle: String {
+        switch self {
+        case .appPreferences:
+            return "App"
+
+        case .projectPreferences:
+            return "Project"
+
+        case .importExport:
+            return "Import / Export"
+
+        case .resetDefaults:
+            return "Reset / Defaults"
+        }
+    }
+
+    var contentTitle: String {
+        switch self {
+        case .appPreferences:
+            return "App Preferences"
+
+        case .projectPreferences:
+            return "Project Preferences"
+
+        case .importExport:
+            return "Import / Export"
+
+        case .resetDefaults:
+            return "Reset / Defaults"
+        }
     }
 
     var systemImage: String {

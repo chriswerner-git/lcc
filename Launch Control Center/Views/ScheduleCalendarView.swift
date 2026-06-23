@@ -43,8 +43,8 @@ struct ScheduleCalendarView: View {
     @State private var deletingOccurrence: ScheduleOccurrence?
     @State private var filteredSeriesID: UUID?
 
-    private let timeColumnWidth: CGFloat = 62
-    private let dayHeaderHeight: CGFloat = 74
+    private let timeColumnWidth: CGFloat = LCCLayout.Schedule.timeColumnWidth
+    private let dayHeaderHeight: CGFloat = LCCLayout.Schedule.dayHeaderHeight
 
     private var hourRowHeight: CGFloat {
         CGFloat(storedHourRowHeight)
@@ -141,7 +141,7 @@ struct ScheduleCalendarView: View {
             }
             .padding(20)
         }
-        .frame(minWidth: 1220, minHeight: 780)
+        .lccWindowPresentation(title: "LCC - Schedule", metrics: LCCLayout.Window.schedule)
         .onAppear {
             let now = Date()
             visibleDayDate = now
@@ -227,29 +227,11 @@ struct ScheduleCalendarView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(LCCDesign.selectedFill())
-                    .frame(width: 40, height: 40)
-
-                Image(systemName: "calendar")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(LCCDesign.ColorToken.active)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Schedule")
-                    .font(.largeTitle)
-                    .bold()
-
-                Text("Calendar and list views for auditing and managing scheduled Events.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
+        LCCWindowTopChrome(
+            title: "Schedule",
+            subtitle: "Review, filter, and edit scheduled Event occurrences.",
+            systemImage: "calendar"
+        ) {
             Button {
                 openWindow(id: "actions-window")
             } label: {
@@ -262,7 +244,7 @@ struct ScheduleCalendarView: View {
             } label: {
                 Label("Add Events", systemImage: "calendar.badge.plus")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
         }
     }
 
@@ -338,17 +320,15 @@ struct ScheduleCalendarView: View {
                     .frame(height: 22)
 
                 if selectedPresentationMode == .calendar && selectedRangeMode != .month {
-                    Text("Hour Height")
+                    Text("Scale")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Slider(value: $storedHourRowHeight, in: 58...150)
-                        .frame(width: 220)
-
-                    Text("\(Int(storedHourRowHeight))")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 32, alignment: .trailing)
+                    Slider(
+                        value: $storedHourRowHeight,
+                        in: LCCLayout.Schedule.hourScaleMinimum...LCCLayout.Schedule.hourScaleMaximum
+                    )
+                    .frame(width: LCCLayout.Schedule.controlSliderWidth)
                 }
 
                 Text("Right-click Events for Run, Edit, Delete. Double-click to edit.")
@@ -402,7 +382,6 @@ struct ScheduleCalendarView: View {
         let utilityCount = occurrences.filter { $0.action.type == .utility }.count
         let unavailableCount = occurrences.filter { $0.isEffectivelyScheduled == false }.count
         let pastCount = occurrences.filter { $0.isPast }.count
-        let nextOccurrence = occurrences.first(where: { $0.isNext })
 
         return HStack(spacing: 10) {
             scheduleSummaryMetric(
@@ -454,14 +433,6 @@ struct ScheduleCalendarView: View {
             }
 
             Spacer(minLength: 8)
-
-            if let nextOccurrence {
-                nextOccurrenceSummary(occurrence: nextOccurrence)
-            } else {
-                Label("No upcoming Events in this view", systemImage: "calendar.badge.exclamationmark")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -602,17 +573,35 @@ struct ScheduleCalendarView: View {
     // MARK: - Time Grid
 
     private func timeGrid(days: [Date]) -> some View {
-        GeometryReader { geometry in
+        let occurrencesByDay = occurrenceBuckets(for: days)
+
+        return GeometryReader { geometry in
             let columnCount = max(days.count, 1)
-            let dayColumnWidth = max((geometry.size.width - timeColumnWidth) / CGFloat(columnCount), 124)
+            let scrollbarReserve = LCCLayout.Schedule.verticalScrollbarReserve
+            let availableGridWidth = max(
+                geometry.size.width - scrollbarReserve,
+                timeColumnWidth + (LCCLayout.Schedule.minimumDayColumnWidth * CGFloat(columnCount))
+            )
+            let dayColumnWidth = max(
+                floor((availableGridWidth - timeColumnWidth) / CGFloat(columnCount)),
+                LCCLayout.Schedule.minimumDayColumnWidth
+            )
             let gridWidth = timeColumnWidth + (dayColumnWidth * CGFloat(columnCount))
             let gridHeight = hourRowHeight * 24
 
             VStack(spacing: 0) {
-                dayHeaderRow(
-                    days: days,
-                    dayColumnWidth: dayColumnWidth
-                )
+                HStack(spacing: 0) {
+                    dayHeaderRow(
+                        days: days,
+                        occurrencesByDay: occurrencesByDay,
+                        dayColumnWidth: dayColumnWidth
+                    )
+                    .frame(width: gridWidth, height: dayHeaderHeight, alignment: .leading)
+
+                    Color.clear
+                        .frame(width: scrollbarReserve, height: dayHeaderHeight)
+                }
+                .frame(height: dayHeaderHeight)
 
                 ScrollView(.vertical) {
                     ZStack(alignment: .topLeading) {
@@ -630,6 +619,7 @@ struct ScheduleCalendarView: View {
                                 ForEach(days, id: \.self) { day in
                                     dayTimeColumn(
                                         day: day,
+                                        occurrences: occurrencesByDay[Calendar.current.startOfDay(for: day)] ?? [],
                                         width: dayColumnWidth
                                     )
                                 }
@@ -643,6 +633,9 @@ struct ScheduleCalendarView: View {
             .background(cardBackground)
             .overlay(cardBorder)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .transaction { transaction in
+                transaction.animation = nil
+            }
         }
     }
 
@@ -677,6 +670,7 @@ struct ScheduleCalendarView: View {
 
     private func dayHeaderRow(
         days: [Date],
+        occurrencesByDay: [Date: [ScheduleOccurrence]],
         dayColumnWidth: CGFloat
     ) -> some View {
         HStack(spacing: 0) {
@@ -693,7 +687,10 @@ struct ScheduleCalendarView: View {
             .background(headerBackground)
 
             ForEach(days, id: \.self) { day in
-                dayHeaderCell(day)
+                dayHeaderCell(
+                    day,
+                    occurrenceCount: occurrencesByDay[Calendar.current.startOfDay(for: day)]?.count ?? 0
+                )
                     .frame(width: dayColumnWidth, height: dayHeaderHeight)
                     .background(headerBackground)
                     .overlay(verticalDivider, alignment: .leading)
@@ -701,18 +698,19 @@ struct ScheduleCalendarView: View {
         }
     }
 
-    private func dayHeaderCell(_ day: Date) -> some View {
-        let count = eventOccurrences(on: day).count
-
-        return VStack(alignment: .leading, spacing: 4) {
+    private func dayHeaderCell(
+        _ day: Date,
+        occurrenceCount: Int
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(Self.shortWeekdayFormatter.string(from: day))
                     .font(.headline)
 
                 Spacer()
 
-                if count > 0 {
-                    Text("\(count)")
+                if occurrenceCount > 0 {
+                    Text("\(occurrenceCount) \(occurrenceCount == 1 ? "Event" : "Events")")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -742,8 +740,8 @@ struct ScheduleCalendarView: View {
                 Spacer()
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, LCCLayout.Schedule.dayHeaderHorizontalPadding)
+        .padding(.vertical, LCCLayout.Schedule.dayHeaderVerticalPadding)
     }
 
     private var hourLabelColumn: some View {
@@ -766,12 +764,15 @@ struct ScheduleCalendarView: View {
 
     private func dayTimeColumn(
         day: Date,
+        occurrences: [ScheduleOccurrence],
         width: CGFloat
     ) -> some View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
                 hourCell(
-                    day: day,
+                    occurrences: occurrences.filter { occurrence in
+                        Calendar.current.component(.hour, from: occurrence.occurrenceDate) == hour
+                    },
                     hour: hour
                 )
                 .frame(width: width, height: hourRowHeight)
@@ -780,12 +781,10 @@ struct ScheduleCalendarView: View {
     }
 
     private func hourCell(
-        day: Date,
+        occurrences: [ScheduleOccurrence],
         hour: Int
     ) -> some View {
-        let occurrences = eventOccurrences(on: day, hour: hour)
-
-        return ZStack(alignment: .topLeading) {
+        ZStack(alignment: .topLeading) {
             if occurrences.isEmpty == false {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(occurrences) { occurrence in
@@ -1224,6 +1223,17 @@ struct ScheduleCalendarView: View {
     }
 
     // MARK: - Occurrence Calculation
+
+    private func occurrenceBuckets(for days: [Date]) -> [Date: [ScheduleOccurrence]] {
+        var buckets: [Date: [ScheduleOccurrence]] = [:]
+
+        for day in days {
+            let dayStart = Calendar.current.startOfDay(for: day)
+            buckets[dayStart] = eventOccurrences(on: dayStart)
+        }
+
+        return buckets
+    }
 
     private func eventOccurrences(on day: Date) -> [ScheduleOccurrence] {
         let now = Date()
