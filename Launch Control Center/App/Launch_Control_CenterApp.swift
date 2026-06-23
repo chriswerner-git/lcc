@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: Launch_Control_CenterApp.swift
 //  Purpose: Main application entry point, windows, menu bar, and app commands.

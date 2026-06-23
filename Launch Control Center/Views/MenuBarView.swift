@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: MenuBarView.swift
 //  Purpose: Menu bar interface for quick app navigation and status.

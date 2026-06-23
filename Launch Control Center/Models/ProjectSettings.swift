@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: ProjectSettings.swift
 //  Purpose: Legacy project settings container retained for compatibility.

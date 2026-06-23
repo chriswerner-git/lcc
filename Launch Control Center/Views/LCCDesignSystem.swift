@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: LCCDesignSystem.swift
 //  Purpose: Centralized visual design tokens for Launch Control Center.

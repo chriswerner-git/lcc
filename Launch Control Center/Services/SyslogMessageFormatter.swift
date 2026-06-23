@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: SyslogMessageFormatter.swift
 //  Purpose: Builds syslog-style UDP message payloads.

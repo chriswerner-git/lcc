@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: ContentView.swift
 //  Purpose: Main Dashboard shell and manual Action trigger layout.
@@ -39,6 +39,9 @@ struct ContentView: View {
                     .environmentObject(appState)
 
                 ScheduleStatusView()
+                    .environmentObject(appState)
+
+                ConfigurationHealthDashboardView()
                     .environmentObject(appState)
 
                 dashboardDivider
@@ -461,4 +464,71 @@ private struct DashboardWindowConfigurator: NSViewRepresentable {
 #Preview {
     ContentView()
         .environmentObject(AppState())
+}
+
+// MARK: - Configuration Health
+
+private struct ConfigurationHealthDashboardView: View {
+    @EnvironmentObject var appState: AppState
+
+    private var report: ConfigurationHealthReport {
+        appState.configurationHealthReport
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: report.level.systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(healthColor)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Configuration Health")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text(report.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(healthColor)
+                }
+
+                Text(report.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if let firstIssue = report.issues.first {
+                Text(firstIssue.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            LCCDesign.cardBackground(
+                cornerRadius: LCCDesign.Radius.card,
+                opacity: 0.65
+            )
+        )
+        .overlay(LCCDesign.cardBorder(cornerRadius: LCCDesign.Radius.card))
+    }
+
+    private var healthColor: Color {
+        switch report.level {
+        case .healthy:
+            return LCCDesign.ColorToken.active
+
+        case .warning:
+            return LCCDesign.ColorToken.warning
+
+        case .error:
+            return LCCDesign.ColorToken.error
+        }
+    }
 }

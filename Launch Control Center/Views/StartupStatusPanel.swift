@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: StartupStatusPanel.swift
 //  Purpose: Non-blocking startup status panel shown briefly after app launch.
@@ -60,7 +60,7 @@ final class StartupStatusPanelController {
 
         let hostingView = NSHostingView(rootView: contentView)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 570),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -113,7 +113,7 @@ private struct StartupStatusPanelView: View {
             footer
         }
         .padding(24)
-        .frame(width: 600, height: 520)
+        .frame(width: 600, height: 570)
         .background(LCCDesign.screenBackground(controlOpacity: 0.72))
     }
 
@@ -184,6 +184,15 @@ private struct StartupStatusPanelView: View {
                 title: "Schedule Status",
                 value: scheduleStatusText,
                 color: scheduleStatusColor
+            )
+
+            StartupStatusDivider()
+
+            StartupStatusRow(
+                icon: appState.configurationHealthReport.level.systemImage,
+                title: "Configuration Health",
+                value: appState.configurationHealthReport.title,
+                color: configurationHealthColor
             )
 
             StartupStatusDivider()
@@ -290,6 +299,19 @@ private struct StartupStatusPanelView: View {
 
     private var scheduleStatusColor: Color {
         (appState.showActionsEnabled || appState.utilityActionsEnabled) ? LCCDesign.ColorToken.success : LCCDesign.ColorToken.warning
+    }
+
+    private var configurationHealthColor: Color {
+        switch appState.configurationHealthReport.level {
+        case .healthy:
+            return LCCDesign.ColorToken.active
+
+        case .warning:
+            return LCCDesign.ColorToken.warning
+
+        case .error:
+            return LCCDesign.ColorToken.error
+        }
     }
 
     private var appVersion: String {

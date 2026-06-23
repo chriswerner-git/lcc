@@ -1,8 +1,8 @@
 //
-//  ┌─────────────────────────────────────────────────────────────┐
-//  │  Lunar Telephone Company                                   │
-//  │  Launch Control Center                                     │
-//  └─────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────┐
+// │  Lunar Telephone Company                                    │
+// │  Launch Control Center                                      │
+// └─────────────────────────────────────────────────────────────┘
 //
 //  File: AppState.swift
 //  Purpose: Central app state, persistence coordination, scheduling, and Action execution.
@@ -21,6 +21,74 @@
 import AppKit
 import Combine
 import Foundation
+
+
+// MARK: - Configuration Health
+
+enum ConfigurationHealthLevel: Int, Codable, Comparable {
+    case healthy = 0
+    case warning = 1
+    case error = 2
+
+    static func < (lhs: ConfigurationHealthLevel, rhs: ConfigurationHealthLevel) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .healthy:
+            return "Healthy"
+
+        case .warning:
+            return "Warnings"
+
+        case .error:
+            return "Errors"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .healthy:
+            return "checkmark.circle.fill"
+
+        case .warning:
+            return "exclamationmark.triangle.fill"
+
+        case .error:
+            return "xmark.octagon.fill"
+        }
+    }
+}
+
+struct ConfigurationHealthIssue: Identifiable, Codable {
+    var id: UUID = UUID()
+    var level: ConfigurationHealthLevel
+    var title: String
+    var detail: String
+}
+
+struct ConfigurationHealthReport: Codable {
+    var level: ConfigurationHealthLevel
+    var issues: [ConfigurationHealthIssue]
+
+    var title: String {
+        level.displayName
+    }
+
+    var summary: String {
+        switch level {
+        case .healthy:
+            return "Configuration looks ready."
+
+        case .warning:
+            return "\(issues.count) warning\(issues.count == 1 ? "" : "s") found."
+
+        case .error:
+            return "\(issues.count) issue\(issues.count == 1 ? "" : "s") need attention."
+        }
+    }
+}
 
 // MARK: - Dock Icon Visibility Preference
 
@@ -544,6 +612,139 @@ final class AppState: ObservableObject {
 
     @Published private(set) var scheduleExecutionHistory: [ScheduleExecutionRecord] = [] {
         didSet { PersistenceService.shared.saveScheduleExecutionHistory(scheduleExecutionHistory) }
+    }
+
+    // MARK: - Configuration Health
+
+    var configurationHealthReport: ConfigurationHealthReport {
+        evaluateConfigurationHealth()
+    }
+
+    private func evaluateConfigurationHealth() -> ConfigurationHealthReport {
+        var issues: [ConfigurationHealthIssue] = []
+        let actionIDs = Set(actionDefinitions.map(\.id))
+        let availableSourceIPs = Set(
+            NetworkInventoryService.currentIPv4Interfaces()
+                .filter { $0.isUp && $0.isRunning }
+                .map(\.ipv4Address)
+        )
+
+        if actionDefinitions.isEmpty {
+            issues.append(
+                ConfigurationHealthIssue(
+                    level: .warning,
+                    title: "No Actions defined",
+                    detail: "Define at least one Show or Utility Action before scheduling playback."
+                )
+            )
+        }
+
+        if scheduleEntries.isEmpty {
+            issues.append(
+                ConfigurationHealthIssue(
+                    level: .warning,
+                    title: "No Events scheduled",
+                    detail: "No scheduled Events are currently defined. Manual Actions can still run."
+                )
+            )
+        }
+
+        if !showActionsEnabled || !utilityActionsEnabled {
+            let disabledDescription: String
+            switch (showActionsEnabled, utilityActionsEnabled) {
+            case (false, false):
+                disabledDescription = "Show and Utility scheduled Events are disabled."
+
+            case (false, true):
+                disabledDescription = "Show scheduled Events are disabled."
+
+            case (true, false):
+                disabledDescription = "Utility scheduled Events are disabled."
+
+            case (true, true):
+                disabledDescription = "Scheduled Events are enabled."
+            }
+
+            issues.append(
+                ConfigurationHealthIssue(
+                    level: .warning,
+                    title: "Schedule partially disabled",
+                    detail: disabledDescription
+                )
+            )
+        }
+
+        let missingActionReferences = scheduleEntries.filter { !actionIDs.contains($0.actionDefinitionID) }
+        if !missingActionReferences.isEmpty {
+            issues.append(
+                ConfigurationHealthIssue(
+                    level: .error,
+                    title: "Events reference missing Actions",
+                    detail: "\(missingActionReferences.count) Event\(missingActionReferences.count == 1 ? "" : "s") reference Actions that are no longer defined."
+                )
+            )
+        }
+
+        let unavailableSourceCount = unavailableSelectedSourceIPAddressCount(availableSourceIPs: availableSourceIPs)
+        if unavailableSourceCount > 0 {
+            issues.append(
+                ConfigurationHealthIssue(
+                    level: .warning,
+                    title: "Unavailable UDP source IP",
+                    detail: "\(unavailableSourceCount) UDP step\(unavailableSourceCount == 1 ? "" : "s") select a source IP that is not currently available."
+                )
+            )
+        }
+
+        let oversizedMessageCount = oversizedUDPPayloadCount()
+        if oversizedMessageCount > 0 {
+            issues.append(
+                ConfigurationHealthIssue(
+                    level: .warning,
+                    title: "Oversized UDP payload",
+                    detail: "\(oversizedMessageCount) message\(oversizedMessageCount == 1 ? "" : "s") exceed the recommended \(UDPPayloadValidation.warningByteLimit)-byte UDP payload limit."
+                )
+            )
+        }
+
+        let level = issues.map(\.level).max() ?? .healthy
+        return ConfigurationHealthReport(level: level, issues: issues)
+    }
+
+    private func unavailableSelectedSourceIPAddressCount(availableSourceIPs: Set<String>) -> Int {
+        var count = 0
+
+        for action in actionDefinitions {
+            for command in action.commands where !command.sourceIPAddress.isEmpty {
+                if !availableSourceIPs.contains(command.sourceIPAddress) {
+                    count += 1
+                }
+            }
+
+            for command in action.utilityCommands where command.kind == .sendUDP && !command.udpSourceIPAddress.isEmpty {
+                if !availableSourceIPs.contains(command.udpSourceIPAddress) {
+                    count += 1
+                }
+            }
+        }
+
+        return count
+    }
+
+    private func oversizedUDPPayloadCount() -> Int {
+        var count = 0
+
+        for action in actionDefinitions {
+            count += action.commands.filter { command in
+                command.message.utf8.count > UDPPayloadValidation.warningByteLimit
+            }.count
+
+            count += action.utilityCommands.filter { command in
+                command.kind == .sendUDP && command.udpMessage.utf8.count > UDPPayloadValidation.warningByteLimit
+            }.count
+        }
+
+        return count
     }
 
     // MARK: - Init
