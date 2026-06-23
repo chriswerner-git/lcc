@@ -10,6 +10,7 @@
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
+import AppKit
 import SwiftUI
 
 struct TodayScheduleView: View {
@@ -308,9 +309,7 @@ struct ScheduleEntryRow: View {
             .disabled(action == nil)
 
             Button("Delete") {
-                appState.scheduleEntries.removeAll {
-                    $0.id == event.id
-                }
+                deleteEventAfterConfirmation()
             }
         }
         .padding(.horizontal, 12)
@@ -371,6 +370,30 @@ struct ScheduleEntryRow: View {
                     ? Color.black.opacity(0.14)
                     : (isNext ? LCCDesign.ColorToken.active.opacity(0.055) : Color.clear)
             )
+    }
+
+    // MARK: - Delete Handling
+
+    private func deleteEventAfterConfirmation() {
+        let alert = NSAlert()
+        alert.messageText = event.repeatsDaily ? "Delete Event Series?" : "Delete Event?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: event.repeatsDaily ? "Delete Series" : "Delete Event")
+        alert.addButton(withTitle: "Cancel")
+
+        if event.repeatsDaily {
+            alert.informativeText = "This will permanently delete the recurring Event series for ‘\(action?.name ?? "Unknown Action")’. This cannot be undone."
+        } else {
+            alert.informativeText = "This will permanently delete the scheduled Event for ‘\(action?.name ?? "Unknown Action")’. This cannot be undone."
+        }
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        appState.scheduleEntries.removeAll {
+            $0.id == event.id
+        }
     }
 
     // MARK: - Date Formatting

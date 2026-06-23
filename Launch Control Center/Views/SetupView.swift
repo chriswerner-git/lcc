@@ -26,6 +26,7 @@ struct SetupView: View {
     @State private var configurationAuditSummary: ConfigurationAuditSummary?
     @State private var resetStatus: String = "No reset actions have been performed."
     @State private var restoreStatus: String = "No backup restore has been performed."
+    @State private var diagnosticBundleStatus: String = "No diagnostic bundle has been exported."
     @State private var configurationBackups: [ConfigurationBackupSnapshot] = []
     @State private var selectedConfigurationBackupID: String?
     @State private var networkInterfaces: [NetworkInterfaceSnapshot] = NetworkInventoryService.currentIPv4Interfaces()
@@ -925,6 +926,11 @@ struct SetupView: View {
             Divider()
                 .opacity(0.35)
 
+            diagnosticBundleSection
+
+            Divider()
+                .opacity(0.35)
+
             restoreFromBackupSection
         }
         .padding(14)
@@ -986,6 +992,46 @@ struct SetupView: View {
         .padding(10)
         .background(insetPanelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var diagnosticBundleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "stethoscope")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(LCCDesign.ColorToken.active)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Diagnostic Bundle")
+                        .font(.subheadline)
+                        .bold()
+
+                    Text("Exports a support ZIP containing the current configuration, health report, network inventory, app information, and recent operational logs.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    exportDiagnosticBundle()
+                } label: {
+                    Label("Export Diagnostic Bundle", systemImage: "shippingbox.and.arrow.backward")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Text(diagnosticBundleStatus)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(insetPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
     }
 
     private var restoreFromBackupSection: some View {
@@ -1331,6 +1377,32 @@ struct SetupView: View {
         }
     }
 
+    private func exportDiagnosticBundle() {
+        let panel = NSSavePanel()
+        panel.title = "Export Launch Control Diagnostic Bundle"
+        panel.nameFieldStringValue = defaultDiagnosticBundleFileName()
+        panel.allowedContentTypes = [UTType(filenameExtension: "zip") ?? .data]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+
+        let response = panel.runModal()
+
+        guard response == .OK,
+              let url = panel.url else {
+            diagnosticBundleStatus = "Diagnostic bundle export cancelled."
+            return
+        }
+
+        let finalURL = urlWithZipExtension(url)
+
+        do {
+            try appState.exportDiagnosticBundle(to: finalURL)
+            diagnosticBundleStatus = "Exported diagnostic bundle: \(finalURL.lastPathComponent)"
+        } catch {
+            diagnosticBundleStatus = "Diagnostic bundle export failed: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Import
 
     private func importConfiguration() {
@@ -1451,6 +1523,32 @@ struct SetupView: View {
         }
 
         return url.deletingPathExtension().appendingPathExtension("launchcontrol")
+    }
+
+    private func defaultDiagnosticBundleFileName() -> String {
+        let project = sanitizedFileName(appState.projectName)
+        let dateStamp = diagnosticDateStamp(Date())
+
+        return "\(project)_Diagnostics_\(dateStamp).zip"
+    }
+
+    private static let diagnosticDateStampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return formatter
+    }()
+
+    private func diagnosticDateStamp(_ date: Date) -> String {
+        SetupView.diagnosticDateStampFormatter.string(from: date)
+    }
+
+    private func urlWithZipExtension(_ url: URL) -> URL {
+        if url.pathExtension.lowercased() == "zip" {
+            return url
+        }
+
+        return url.deletingPathExtension().appendingPathExtension("zip")
     }
 
     private func configurationSummaryText(for summary: ConfigurationAuditSummary) -> String {

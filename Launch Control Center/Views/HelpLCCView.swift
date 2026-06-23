@@ -130,6 +130,8 @@ struct HelpLCCView: View {
                 "Show Actions contain message steps such as Standard UDP or Syslog messages.",
                 "Utility Actions perform app-level operations such as setting volume, enabling or disabling scheduled Show or Utility Events, running another Action, or sending UDP.",
                 "Each step can include a delay. A delay of 0 runs the next step as quickly as the app and network can process it.",
+                "Use Duplicate Action to copy an existing Action and safely generate new Action and step IDs.",
+                "Deleting an Action asks for confirmation and warns when scheduled Events currently use it.",
                 "Use notes to document operator reminders, dependencies, or intent.",
                 "The Action runtime safety limit prevents a single Action from running longer than two minutes."
             ])
@@ -171,7 +173,8 @@ struct HelpLCCView: View {
                 "Use the filter menu to focus on all Events, Show Events, Utility Events, repeating Events, standalone Events, past Events, or future Events.",
                 "Use Scale to adjust calendar vertical spacing.",
                 "Right-click Events for Run, Edit, or Delete options. Double-click an Event to edit it.",
-                "Deleting a repeating Event may affect one occurrence or the series, depending on the option selected."
+                "Deleting from Schedule asks for confirmation before removing a one-time Event, one occurrence, or an entire series.",
+                "Deleting from Today’s Events also asks for confirmation."
             ])
         }
     }
@@ -202,11 +205,13 @@ struct HelpLCCView: View {
             )
 
             helpBullets([
-                "Export Configuration saves project settings, Actions, scheduled Events, repeats, exclusions, notes, volume output settings, volume presets, and current volume state.",
-                "Import Configuration replaces the current project configuration.",
-                "Import is blocked while an Action is running to avoid changing configuration while playback is in progress.",
-                "Review imported configurations before live use.",
-                "Machine-level App Preferences such as Device Name, Dock Icon Visibility, Launch App at Startup, Prevent Computer Sleep, and log retention are not intended as portable project settings."
+                "Export Configuration saves app settings, project settings, Actions, scheduled Events, repeats, exclusions, notes, volume output settings, volume presets, and current volume state.",
+                "Import Configuration opens a selective import dialog so you can merge with the current show, replace selected categories, or import into a new blank show.",
+                "Events can only be imported when Actions are also imported, which avoids creating abandoned Events.",
+                "Automatic backups are created before import, restore, and reset operations.",
+                "Restore from Automatic Backup can recover a recent pre-import or pre-reset configuration.",
+                "Export Diagnostic Bundle creates a ZIP with the current configuration, schedule check, configuration health report, network inventory, app/system information, and recent operational logs.",
+                "Import, restore, and reset operations are blocked while an Action is running to avoid changing configuration during playback."
             ])
         }
     }
@@ -259,6 +264,7 @@ struct HelpLCCView: View {
                 "For critical operation, also verify macOS Battery/Energy settings, power adapter, display settings, laptop lid behavior, and network stability.",
                 "Keep the Dashboard visible during operation when practical.",
                 "Keep a recent exported configuration backup before major edits.",
+                "Export a Diagnostic Bundle when troubleshooting behavior or preparing support handoff.",
                 "Operators remain responsible for confirming show conditions and connected system behavior before live operation."
             ])
         }

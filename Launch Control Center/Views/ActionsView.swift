@@ -10,6 +10,7 @@
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
+import AppKit
 import SwiftUI
 
 struct ActionsView: View {
@@ -225,7 +226,15 @@ struct ActionsView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu {
-            Button("Delete Action", role: .destructive) {
+            Button {
+                duplicateAction(action)
+            } label: {
+                Label("Duplicate Action", systemImage: "plus.square.on.square")
+            }
+
+            Divider()
+
+            Button("Delete Action…", role: .destructive) {
                 deleteAction(action)
             }
         }
@@ -309,9 +318,56 @@ struct ActionsView: View {
         selectedActionID = action.id
     }
 
+    // MARK: - Duplicate Actions
+
+    private func duplicateAction(_ action: ActionDefinition) {
+        var duplicate = action
+        duplicate.id = UUID()
+        duplicate.name = duplicateActionName(for: action.name)
+        duplicate.commands = action.commands.map { command in
+            var copiedCommand = command
+            copiedCommand.id = UUID()
+            return copiedCommand
+        }
+        duplicate.utilityCommands = action.utilityCommands.map { command in
+            var copiedCommand = command
+            copiedCommand.id = UUID()
+            return copiedCommand
+        }
+
+        appState.actionDefinitions.append(duplicate)
+        selectedActionID = duplicate.id
+    }
+
+    private func duplicateActionName(for originalName: String) -> String {
+        let trimmedName = originalName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseName = trimmedName.isEmpty ? "Action" : trimmedName
+        let existingNames = Set(appState.actionDefinitions.map { $0.name })
+        let firstCandidate = "\(baseName) Copy"
+
+        if existingNames.contains(firstCandidate) == false {
+            return firstCandidate
+        }
+
+        var index = 2
+        while true {
+            let candidate = "\(baseName) Copy \(index)"
+
+            if existingNames.contains(candidate) == false {
+                return candidate
+            }
+
+            index += 1
+        }
+    }
+
     // MARK: - Delete Actions
 
     private func deleteAction(_ action: ActionDefinition) {
+        guard confirmDeleteAction(action) else {
+            return
+        }
+
         appState.actionDefinitions.removeAll {
             $0.id == action.id
         }
@@ -319,6 +375,23 @@ struct ActionsView: View {
         if selectedActionID == action.id {
             selectedActionID = nil
         }
+    }
+
+    private func confirmDeleteAction(_ action: ActionDefinition) -> Bool {
+        let usageCount = eventUsageCount(for: action)
+        let alert = NSAlert()
+        alert.messageText = "Delete Action?"
+        alert.alertStyle = usageCount > 0 ? .critical : .warning
+        alert.addButton(withTitle: "Delete Action")
+        alert.addButton(withTitle: "Cancel")
+
+        if usageCount > 0 {
+            alert.informativeText = "‘\(action.name)’ is used by \(usageCount) scheduled Event\(usageCount == 1 ? "" : "s"). Deleting it will leave those Events without a valid Action until they are edited or removed. This cannot be undone."
+        } else {
+            alert.informativeText = "This will permanently delete ‘\(action.name)’. This cannot be undone."
+        }
+
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     // MARK: - Action Metadata
