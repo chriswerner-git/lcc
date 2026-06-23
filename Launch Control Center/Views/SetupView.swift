@@ -23,6 +23,7 @@ struct SetupView: View {
 
     @State private var selectedCategory: SetupCategory = .appPreferences
     @State private var configurationStatus: String = "No configuration import/export yet."
+    @State private var configurationAuditSummary: ConfigurationAuditSummary?
     @State private var resetStatus: String = "No reset actions have been performed."
     @State private var networkInterfaces: [NetworkInterfaceSnapshot] = NetworkInventoryService.currentIPv4Interfaces()
 
@@ -905,17 +906,93 @@ struct SetupView: View {
 
             Text(configurationStatus)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(configurationStatusColor)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
                 .background(insetPanelBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if let configurationAuditSummary,
+               configurationAuditSummary.issues.isEmpty == false {
+                configurationAuditCard(for: configurationAuditSummary)
+            }
         }
         .padding(14)
         .background(cardBackground)
         .overlay(cardBorder)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var configurationStatusColor: Color {
+        guard let configurationAuditSummary else {
+            return .secondary
+        }
+
+        if configurationAuditSummary.hasErrors {
+            return LCCDesign.ColorToken.error
+        }
+
+        if configurationAuditSummary.hasWarnings {
+            return LCCDesign.ColorToken.warning
+        }
+
+        return LCCDesign.ColorToken.success
+    }
+
+    private func configurationAuditCard(for summary: ConfigurationAuditSummary) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: summary.hasErrors ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(summary.hasErrors ? LCCDesign.ColorToken.error : LCCDesign.ColorToken.warning)
+
+                Text("Schedule Check")
+                    .font(.subheadline)
+                    .bold()
+
+                Text(auditCountSummary(for: summary))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(Array(summary.issues.enumerated()), id: \.offset) { _, issue in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(issue.severity.displayName)
+                        .font(.caption2)
+                        .bold()
+                        .foregroundStyle(issue.severity == .error ? LCCDesign.ColorToken.error : LCCDesign.ColorToken.warning)
+                        .frame(width: 54, alignment: .leading)
+
+                    Text(issue.message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(10)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func auditCountSummary(for summary: ConfigurationAuditSummary) -> String {
+        let errorCount = summary.issues.filter { $0.severity == .error }.count
+        let warningCount = summary.issues.filter { $0.severity == .warning }.count
+        var parts: [String] = []
+
+        if errorCount > 0 {
+            parts.append("\(errorCount) error\(errorCount == 1 ? "" : "s")")
+        }
+
+        if warningCount > 0 {
+            parts.append("\(warningCount) warning\(warningCount == 1 ? "" : "s")")
+        }
+
+        return parts.joined(separator: ", ")
     }
 
     // MARK: - Reset / Defaults
@@ -1087,6 +1164,7 @@ struct SetupView: View {
         guard response == .OK,
               let url = panel.url else {
             configurationStatus = "Export cancelled."
+            configurationAuditSummary = nil
             return
         }
 
@@ -1096,8 +1174,10 @@ struct SetupView: View {
             try appState.exportConfiguration(to: finalURL)
 
             let summary = appState.currentConfigurationAuditSummary()
+            configurationAuditSummary = summary
             configurationStatus = "Exported \(finalURL.lastPathComponent). \(summaryLine(for: summary))"
         } catch {
+            configurationAuditSummary = nil
             configurationStatus = "Export failed: \(error.localizedDescription)"
         }
     }
@@ -1117,6 +1197,7 @@ struct SetupView: View {
         guard response == .OK,
               let url = openPanel.url else {
             configurationStatus = "Import cancelled."
+            configurationAuditSummary = nil
             return
         }
 
@@ -1125,12 +1206,15 @@ struct SetupView: View {
 
             guard confirmImportReplacement(preview: preview) else {
                 configurationStatus = "Import cancelled."
+                configurationAuditSummary = preview.summary
                 return
             }
 
             try appState.importConfiguration(from: url)
+            configurationAuditSummary = preview.summary
             configurationStatus = "Imported \(url.lastPathComponent). \(summaryLine(for: preview.summary))"
         } catch {
+            configurationAuditSummary = nil
             configurationStatus = "Import failed: \(error.localizedDescription)"
         }
     }
@@ -1225,13 +1309,13 @@ struct SetupView: View {
             lines.append("Generated Events: \(summary.finiteGeneratedEventCount)")
         }
 
-        lines.append("Validation: \(summary.statusText)")
+        lines.append("Schedule Check: \(summary.statusText)")
 
         return lines.joined(separator: "\n")
     }
 
     private func summaryLine(for summary: ConfigurationAuditSummary) -> String {
-        "Actions: \(summary.actionCount). Events: \(summary.eventCount). Recurring Series: \(summary.recurringSeriesCount). Validation: \(summary.statusText)."
+        "Actions: \(summary.actionCount). Events: \(summary.eventCount). Recurring Series: \(summary.recurringSeriesCount). Schedule Check: \(summary.statusText)."
     }
 
     private static let configurationDateFormatter: DateFormatter = {

@@ -7,7 +7,12 @@
 //  File: TestingView.swift
 //  Purpose: UDP testing and diagnostics window.
 //
+//  Created by Chris Werner / Lunar Telephone Company.
 //  © 2026 Lunar Telephone Company. All rights reserved.
+//
+//  This view is diagnostic only. It can test source-interface selection,
+//  broadcast sends, and listener binding without changing scheduled Action
+//  playback behavior.
 //
 
 import SwiftUI
@@ -38,6 +43,15 @@ private struct TestingContentView: View {
     // MARK: - State
 
     @State private var testMessage: String = "Hello World!"
+    @State private var networkInterfaces: [NetworkInterfaceSnapshot] = NetworkInventoryService.currentIPv4Interfaces()
+    @State private var selectedSendSourceIPAddress: String = Self.automaticSourceChoice
+    @State private var selectedListenIPAddress: String = Self.allInterfacesChoice
+    @State private var broadcastEnabled: Bool = false
+
+    // MARK: - Constants
+
+    private static let automaticSourceChoice = "Automatic"
+    private static let allInterfacesChoice = "All Interfaces"
 
     // MARK: - Body
 
@@ -56,6 +70,9 @@ private struct TestingContentView: View {
             .padding(16)
         }
         .lccWindowPresentation(title: "LCC - UDP Test", metrics: LCCLayout.Window.testing)
+        .onAppear {
+            refreshNetworkInterfaces()
+        }
         .alert(
             "UDP Listener Stopped",
             isPresented: automaticStopAlertIsPresented
@@ -93,6 +110,138 @@ private struct TestingContentView: View {
         )
     }
 
+    // MARK: - Status
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            statusSection(
+                title: "Last UDP Message Sent",
+                systemImage: "paperplane",
+                text: udpService.lastSendStatus
+            )
+
+            Divider()
+                .overlay(LCCDesign.ColorToken.standardBorder)
+
+            statusSection(
+                title: "Last UDP Message Received",
+                systemImage: "tray.and.arrow.down",
+                text: udpService.lastReceivedMessage
+            )
+        }
+        .padding(12)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func statusSection(
+        title: String,
+        systemImage: String,
+        text: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(LCCDesign.ColorToken.active)
+
+                Text(title)
+                    .font(.headline)
+
+                Spacer()
+            }
+
+            Text(text)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(insetPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
+    // MARK: - Send
+
+    private var sendCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader(
+                title: "Send Test Message",
+                subtitle: "Sends one UDP packet to the destination below."
+            )
+
+            HStack(alignment: .bottom, spacing: 14) {
+                interfacePicker(
+                    label: "Source",
+                    selection: $selectedSendSourceIPAddress,
+                    automaticTitle: Self.automaticSourceChoice
+                )
+                .frame(width: 230)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Broadcast")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Broadcast", isOn: $broadcastEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .help("Enables SO_BROADCAST for this test send only.")
+                }
+
+                Spacer()
+
+                Button {
+                    refreshNetworkInterfaces()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                labeledTextField(
+                    label: "Destination IP Address",
+                    text: $appState.defaultDestinationHost
+                )
+                .frame(width: 165)
+
+                labeledNumberField(
+                    label: "Port",
+                    value: $appState.defaultDestinationPort,
+                    width: 92
+                )
+
+                labeledTextField(
+                    label: "Message",
+                    text: $testMessage
+                )
+                .frame(maxWidth: .infinity)
+            }
+
+            Button {
+                sendTestMessage()
+            } label: {
+                Label("Send UDP Message", systemImage: "paperplane.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+
+            Text("For loopback testing, use destination host 127.0.0.1 and send to the same port the listener is using. For subnet broadcast, use a subnet broadcast address such as 10.10.1.255 where possible.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+        }
+        .padding(12)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     // MARK: - Listener
 
     private var listenerCard: some View {
@@ -108,6 +257,13 @@ private struct TestingContentView: View {
                     value: $appState.incomingUDPPort,
                     width: 150
                 )
+
+                interfacePicker(
+                    label: "Listen Interface",
+                    selection: $selectedListenIPAddress,
+                    automaticTitle: Self.allInterfacesChoice
+                )
+                .frame(width: 245)
 
                 Spacer()
 
@@ -189,9 +345,15 @@ private struct TestingContentView: View {
                 .foregroundStyle(.secondary)
 
             if let listeningPort = udpService.listeningPort {
-                Text("Active Port: \(String(describing: listeningPort))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let listeningLocalIPAddress = udpService.listeningLocalIPAddress {
+                    Text("Active Endpoint: \(listeningLocalIPAddress):\(String(describing: listeningPort))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Active Port: \(String(describing: listeningPort)) on all interfaces")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("Active Port: None")
                     .font(.caption)
@@ -273,107 +435,53 @@ private struct TestingContentView: View {
         }
     }
 
-    // MARK: - Send
+    // MARK: - Interface Selection
 
-    private var sendCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(
-                title: "Send Test Message",
-                subtitle: "Sends one UDP packet to the destination below."
-            )
+    private var selectableInterfaces: [NetworkInterfaceSnapshot] {
+        networkInterfaces.filter { interface in
+            interface.isUp && interface.isRunning
+        }
+    }
 
-            HStack(alignment: .top, spacing: 12) {
-                labeledTextField(
-                    label: "Destination IP Address",
-                    text: $appState.defaultDestinationHost
-                )
-                .frame(width: 165)
-
-                labeledNumberField(
-                    label: "Port",
-                    value: $appState.defaultDestinationPort,
-                    width: 92
-                )
-
-                labeledTextField(
-                    label: "Message",
-                    text: $testMessage
-                )
-                .frame(maxWidth: .infinity)
-            }
-
-            Button {
-                sendTestMessage()
-            } label: {
-                Label("Send UDP Message", systemImage: "paperplane.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
-            Text("For loopback testing, use destination host 127.0.0.1 and send to the same port the listener is using.")
+    private func interfacePicker(
+        label: String,
+        selection: Binding<String>,
+        automaticTitle: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
-        }
-        .padding(12)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
 
-    // MARK: - Status
+            Picker(label, selection: selection) {
+                Text(automaticTitle)
+                    .tag(automaticTitle)
 
-    private var statusCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            statusSection(
-                title: "Last UDP Message Sent",
-                systemImage: "paperplane",
-                text: udpService.lastSendStatus
-            )
+                ForEach(selectableInterfaces) { interface in
+                    Text(interfaceChoiceLabel(interface))
+                        .tag(interface.ipv4Address)
+                }
 
-            Divider()
-                .overlay(LCCDesign.ColorToken.standardBorder)
-
-            statusSection(
-                title: "Last UDP Message Received",
-                systemImage: "tray.and.arrow.down",
-                text: udpService.lastReceivedMessage
-            )
-        }
-        .padding(12)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func statusSection(
-        title: String,
-        systemImage: String,
-        text: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage)
-                    .foregroundStyle(LCCDesign.ColorToken.active)
-
-                Text(title)
-                    .font(.headline)
-
-                Spacer()
+                if selection.wrappedValue != automaticTitle,
+                   selectableInterfaces.contains(where: { $0.ipv4Address == selection.wrappedValue }) == false {
+                    Text("Unavailable: \(selection.wrappedValue)")
+                        .tag(selection.wrappedValue)
+                }
             }
-
-            Text(text)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(insetPanelBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .pickerStyle(.menu)
         }
+    }
+
+    private func interfaceChoiceLabel(_ interface: NetworkInterfaceSnapshot) -> String {
+        if interface.isLoopback {
+            return "\(interface.ipv4Address) — Loopback"
+        }
+
+        return "\(interface.ipv4Address) — \(interface.displayName)"
+    }
+
+    private func refreshNetworkInterfaces() {
+        networkInterfaces = NetworkInventoryService.currentIPv4Interfaces()
     }
 
     // MARK: - Field Helpers
@@ -420,7 +528,12 @@ private struct TestingContentView: View {
             return
         }
 
-        udpService.startListening(port: port)
+        refreshNetworkInterfaces()
+
+        udpService.startListening(
+            port: port,
+            localIPAddress: selectedListenIPAddress == Self.allInterfacesChoice ? nil : selectedListenIPAddress
+        )
     }
 
     private func sendTestMessage() {
@@ -429,10 +542,14 @@ private struct TestingContentView: View {
             return
         }
 
+        refreshNetworkInterfaces()
+
         udpService.send(
             message: testMessage,
             host: appState.defaultDestinationHost,
-            port: port
+            port: port,
+            sourceIPAddress: selectedSendSourceIPAddress == Self.automaticSourceChoice ? nil : selectedSendSourceIPAddress,
+            allowsBroadcast: broadcastEnabled
         )
     }
 

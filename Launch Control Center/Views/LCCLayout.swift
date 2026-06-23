@@ -178,6 +178,7 @@ enum LCCLayout {
         static let ipAddressFieldWidth: CGFloat = 160
         static let portFieldWidth: CGFloat = 86
         static let severityFieldWidth: CGFloat = 132
+        static let sourcePickerWidth: CGFloat = 270
         static let typePickerWidth: CGFloat = 150
         static let stepHeaderIconSize: CGFloat = 30
         static let stepHeaderIconSymbolSize: CGFloat = 12

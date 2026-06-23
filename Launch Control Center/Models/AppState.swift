@@ -1787,10 +1787,14 @@ final class AppState: ObservableObject {
         udpService.send(
             message: payload,
             host: command.host,
-            port: UInt16(command.port)
+            port: UInt16(command.port),
+            sourceIPAddress: command.sourceIPAddress,
+            allowsBroadcast: command.allowsBroadcast
         )
 
-        logger.info("Sent \(command.messageType.rawValue) Step: \(command.name) to \(command.host):\(command.port)")
+        let sourceDescription = command.sourceIPAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "automatic source" : "source \(command.sourceIPAddress)"
+        let broadcastDescription = command.allowsBroadcast ? " broadcast" : ""
+        logger.info("Sent \(command.messageType.rawValue) Step: \(command.name) to \(command.host):\(command.port) using \(sourceDescription)\(broadcastDescription)")
 
         return true
     }
@@ -1808,7 +1812,9 @@ final class AppState: ObservableObject {
         udpService.send(
             message: command.udpMessage,
             host: command.udpHost,
-            port: UInt16(command.udpPort)
+            port: UInt16(command.udpPort),
+            sourceIPAddress: command.udpSourceIPAddress,
+            allowsBroadcast: command.udpAllowsBroadcast
         )
 
         lastMessage = "Utility UDP Step sent: \(command.name)"

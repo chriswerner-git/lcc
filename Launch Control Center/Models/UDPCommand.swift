@@ -95,6 +95,15 @@ struct UDPCommand: Identifiable, Codable {
     var host: String = "127.0.0.1"
     var port: Int = 8001
 
+    // MARK: - Network Options
+
+    // Empty means Automatic routing. When set, the UDP socket attempts to bind
+    // to this local IPv4 address before sending.
+    var sourceIPAddress: String = ""
+
+    // Enables SO_BROADCAST for this step when sending to a subnet broadcast address.
+    var allowsBroadcast: Bool = false
+
     // MARK: - Message Payload
 
     // For Standard UDP, this is sent as-is.
@@ -120,6 +129,8 @@ struct UDPCommand: Identifiable, Codable {
         name: String = "Message Step",
         host: String = "127.0.0.1",
         port: Int = 8001,
+        sourceIPAddress: String = "",
+        allowsBroadcast: Bool = false,
         message: String = "",
         syslogSeverity: SyslogSeverity = .info,
         delaySeconds: Double = 0
@@ -129,6 +140,8 @@ struct UDPCommand: Identifiable, Codable {
         self.name = name
         self.host = host
         self.port = port
+        self.sourceIPAddress = sourceIPAddress
+        self.allowsBroadcast = allowsBroadcast
         self.message = message
         self.syslogSeverity = syslogSeverity
         self.delaySeconds = delaySeconds
@@ -142,6 +155,8 @@ struct UDPCommand: Identifiable, Codable {
         case name
         case host
         case port
+        case sourceIPAddress
+        case allowsBroadcast
         case message
         case syslogSeverity
         case delaySeconds
@@ -155,6 +170,8 @@ struct UDPCommand: Identifiable, Codable {
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Message Step"
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? "127.0.0.1"
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 8001
+        sourceIPAddress = try container.decodeIfPresent(String.self, forKey: .sourceIPAddress) ?? ""
+        allowsBroadcast = try container.decodeIfPresent(Bool.self, forKey: .allowsBroadcast) ?? false
         message = try container.decodeIfPresent(String.self, forKey: .message) ?? ""
         syslogSeverity = try container.decodeIfPresent(SyslogSeverity.self, forKey: .syslogSeverity) ?? .info
         delaySeconds = try container.decodeIfPresent(Double.self, forKey: .delaySeconds) ?? 0
@@ -168,6 +185,8 @@ struct UDPCommand: Identifiable, Codable {
         try container.encode(name, forKey: .name)
         try container.encode(host, forKey: .host)
         try container.encode(port, forKey: .port)
+        try container.encode(sourceIPAddress, forKey: .sourceIPAddress)
+        try container.encode(allowsBroadcast, forKey: .allowsBroadcast)
         try container.encode(message, forKey: .message)
         try container.encode(syslogSeverity, forKey: .syslogSeverity)
         try container.encode(delaySeconds, forKey: .delaySeconds)

@@ -281,7 +281,7 @@ struct ActionsView: View {
         )
 
         let action = ActionDefinition(
-            name: "New Show Action",
+            name: "Show Action",
             type: .show,
             commands: [command],
             utilityCommands: []
@@ -299,7 +299,7 @@ struct ActionsView: View {
         utilityCommand.delaySeconds = 0
 
         let action = ActionDefinition(
-            name: "New Utility Action",
+            name: "Utility Action",
             type: .utility,
             commands: [],
             utilityCommands: [utilityCommand]

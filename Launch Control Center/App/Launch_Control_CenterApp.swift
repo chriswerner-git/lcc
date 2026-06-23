@@ -28,7 +28,22 @@ struct Launch_Control_CenterApp: App {
 
     // MARK: - App State
 
-    @StateObject private var appState = AppState()
+    @StateObject private var appState: AppState
+
+    // MARK: - Init
+
+    init() {
+        let state = AppState()
+        _appState = StateObject(wrappedValue: state)
+
+        // Show a non-blocking startup status panel shortly after launch.
+        // The schedule engine is started inside AppState.init(), before this
+        // presentation-only panel is displayed, so scheduled Events are not
+        // blocked by the startup UI.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            StartupStatusPanelController.shared.show(appState: state)
+        }
+    }
 
     // MARK: - Environment
 
@@ -203,10 +218,16 @@ struct Launch_Control_CenterApp: App {
 
     private var navigationCommands: some Commands {
         CommandMenu("Launch Control") {
+            // Keep this menu aligned with the menu bar extra.
+            // The standard macOS Window menu still lists open windows, but this
+            // menu gives operators a predictable command/navigation list even
+            // when a window has been closed or hidden behind other apps.
             Button("Dashboard") {
                 openAppWindow(id: "Dashboard", title: "LCC - Dashboard")
             }
             .keyboardShortcut("1", modifiers: [.command])
+
+            Divider()
 
             Button("Schedule") {
                 openAppWindow(id: "schedule-window", title: "LCC - Schedule")
@@ -223,7 +244,9 @@ struct Launch_Control_CenterApp: App {
             }
             .keyboardShortcut("4", modifiers: [.command])
 
-            Button("UDP Tests") {
+            Divider()
+
+            Button("UDP Testing") {
                 openAppWindow(id: "testing-window", title: "LCC - UDP Test")
             }
             .keyboardShortcut("5", modifiers: [.command])
@@ -235,19 +258,21 @@ struct Launch_Control_CenterApp: App {
             }
             .keyboardShortcut(",", modifiers: .command)
 
+            Button("Help") {
+                openAppWindow(id: "help-lcc-window", title: "LCC - Help")
+            }
+            .keyboardShortcut("/", modifiers: [.command])
+
+            Button("About LCC") {
+                openAppWindow(id: "about-lcc-window", title: "LCC - About")
+            }
+
+            Divider()
+
             Button("Open Logs Folder") {
                 appState.openLogsFolder()
                 activateApp()
             }
-
-            Button("About Launch Control Center") {
-                openAppWindow(id: "about-lcc-window", title: "LCC - About")
-            }
-
-            Button("Launch Control Center Help") {
-                openAppWindow(id: "help-lcc-window", title: "LCC - Help")
-            }
-            .keyboardShortcut("/", modifiers: [.command])
         }
     }
 

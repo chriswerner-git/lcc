@@ -29,6 +29,7 @@ final class UDPService: ObservableObject {
     @Published var lastSendStatus: String = "No UDP messages sent"
     @Published var listenerState: UDPListenerState = .stopped
     @Published var listeningPort: UInt16?
+    @Published var listeningLocalIPAddress: String?
     @Published var listenerAutomaticStopMessage: String?
 
     // MARK: - Private Properties
@@ -54,7 +55,10 @@ final class UDPService: ObservableObject {
 
     // MARK: - Listening
 
-    func startListening(port: UInt16) {
+    func startListening(
+        port: UInt16,
+        localIPAddress: String? = nil
+    ) {
         stopListening(
             statusMessage: "UDP listener restarting",
             showAutomaticStopAlert: false
@@ -62,19 +66,38 @@ final class UDPService: ObservableObject {
 
         listenerAutomaticStopMessage = nil
 
+        let trimmedLocalIPAddress = localIPAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let boundLocalIPAddress = (trimmedLocalIPAddress?.isEmpty == false) ? trimmedLocalIPAddress : nil
+
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             listenerState = .failed
             listeningPort = nil
+            listeningLocalIPAddress = nil
             lastReceivedMessage = "Invalid UDP listen port: \(port)"
             return
         }
 
         listenerState = .starting
         listeningPort = port
-        lastReceivedMessage = "Starting UDP listener on port \(port). Diagnostic listener will stop automatically after 10 minutes."
+        listeningLocalIPAddress = boundLocalIPAddress
+
+        if let boundLocalIPAddress {
+            lastReceivedMessage = "Starting UDP listener on \(boundLocalIPAddress):\(port). Diagnostic listener will stop automatically after 10 minutes."
+        } else {
+            lastReceivedMessage = "Starting UDP listener on all interfaces, port \(port). Diagnostic listener will stop automatically after 10 minutes."
+        }
 
         do {
-            listener = try NWListener(using: .udp, on: nwPort)
+            let parameters = NWParameters.udp
+
+            if let boundLocalIPAddress {
+                parameters.requiredLocalEndpoint = .hostPort(
+                    host: NWEndpoint.Host(boundLocalIPAddress),
+                    port: nwPort
+                )
+            }
+
+            listener = try NWListener(using: parameters, on: nwPort)
 
             listener?.newConnectionHandler = { [weak self] newConnection in
                 guard let self else {
@@ -96,19 +119,28 @@ final class UDPService: ObservableObject {
                     case .ready:
                         self.listenerState = .listening
                         self.listeningPort = port
-                        self.lastReceivedMessage = "Listening on UDP port \(port). Listener will stop automatically after 10 minutes."
+                        self.listeningLocalIPAddress = boundLocalIPAddress
+
+                        if let boundLocalIPAddress {
+                            self.lastReceivedMessage = "Listening on \(boundLocalIPAddress):\(port). Listener will stop automatically after 10 minutes."
+                        } else {
+                            self.lastReceivedMessage = "Listening on all interfaces, port \(port). Listener will stop automatically after 10 minutes."
+                        }
+
                         self.startListenerTimeoutTimer()
 
                     case .failed(let error):
                         self.cancelListenerTimeoutTimer()
                         self.listenerState = .failed
                         self.listeningPort = nil
+                        self.listeningLocalIPAddress = nil
                         self.lastReceivedMessage = "UDP listener failed: \(error.localizedDescription)"
 
                     case .cancelled:
                         self.cancelListenerTimeoutTimer()
                         self.listenerState = .stopped
                         self.listeningPort = nil
+                        self.listeningLocalIPAddress = nil
                         self.lastReceivedMessage = self.listenerCancellationStatusMessage
 
                     default:
@@ -122,6 +154,7 @@ final class UDPService: ObservableObject {
             cancelListenerTimeoutTimer()
             listenerState = .failed
             listeningPort = nil
+            listeningLocalIPAddress = nil
             lastReceivedMessage = "Failed to listen: \(error.localizedDescription)"
         }
     }
@@ -150,6 +183,7 @@ final class UDPService: ObservableObject {
 
         listenerState = .stopped
         listeningPort = nil
+        listeningLocalIPAddress = nil
         lastReceivedMessage = statusMessage
     }
 
@@ -234,10 +268,14 @@ final class UDPService: ObservableObject {
     func send(
         message: String,
         host: String,
-        port: UInt16
+        port: UInt16,
+        sourceIPAddress: String? = nil,
+        allowsBroadcast: Bool = false
     ) {
         let destinationHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let destinationPort = String(port)
+        let trimmedSourceIPAddress = sourceIPAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let boundSourceIPAddress = (trimmedSourceIPAddress?.isEmpty == false) ? trimmedSourceIPAddress : nil
 
         guard destinationHost.isEmpty == false else {
             updateSendStatus("UDP send failed: destination host is empty")
@@ -248,7 +286,9 @@ final class UDPService: ObservableObject {
             self?.sendUsingSocket(
                 message: message,
                 host: destinationHost,
-                port: destinationPort
+                port: destinationPort,
+                sourceIPAddress: boundSourceIPAddress,
+                allowsBroadcast: allowsBroadcast
             )
         }
     }
@@ -256,7 +296,9 @@ final class UDPService: ObservableObject {
     private func sendUsingSocket(
         message: String,
         host: String,
-        port: String
+        port: String,
+        sourceIPAddress: String?,
+        allowsBroadcast: Bool
     ) {
         let socketFileDescriptor = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
 
@@ -267,6 +309,29 @@ final class UDPService: ObservableObject {
 
         defer {
             close(socketFileDescriptor)
+        }
+
+        if allowsBroadcast {
+            var broadcastEnabled: Int32 = 1
+            let broadcastResult = setsockopt(
+                socketFileDescriptor,
+                SOL_SOCKET,
+                SO_BROADCAST,
+                &broadcastEnabled,
+                socklen_t(MemoryLayout<Int32>.size)
+            )
+
+            guard broadcastResult == 0 else {
+                updateSendStatus("UDP broadcast setup failed: \(currentSocketError())")
+                return
+            }
+        }
+
+        if let sourceIPAddress {
+            guard bindSocket(socketFileDescriptor, to: sourceIPAddress) else {
+                updateSendStatus("UDP source bind failed for \(sourceIPAddress): \(currentSocketError())")
+                return
+            }
         }
 
         var hints = addrinfo(
@@ -318,7 +383,34 @@ final class UDPService: ObservableObject {
             return
         }
 
-        updateSendStatus("Sent UDP to \(host):\(port) — \(message)")
+        let sourceDescription = sourceIPAddress.map { " from \($0)" } ?? ""
+        let broadcastDescription = allowsBroadcast ? " broadcast" : ""
+        updateSendStatus("Sent UDP\(broadcastDescription)\(sourceDescription) to \(host):\(port) — \(message)")
+    }
+
+    private func bindSocket(
+        _ socketFileDescriptor: Int32,
+        to sourceIPAddress: String
+    ) -> Bool {
+        var sourceAddress = sockaddr_in()
+        sourceAddress.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        sourceAddress.sin_family = sa_family_t(AF_INET)
+        sourceAddress.sin_port = 0
+
+        guard inet_pton(AF_INET, sourceIPAddress, &sourceAddress.sin_addr) == 1 else {
+            errno = EINVAL
+            return false
+        }
+
+        return withUnsafePointer(to: &sourceAddress) { sourceAddressPointer in
+            sourceAddressPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddressPointer in
+                bind(
+                    socketFileDescriptor,
+                    socketAddressPointer,
+                    socklen_t(MemoryLayout<sockaddr_in>.size)
+                ) == 0
+            }
+        }
     }
 
     // MARK: - Status Helpers

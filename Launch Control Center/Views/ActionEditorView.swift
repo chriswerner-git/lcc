@@ -21,6 +21,10 @@ struct ActionEditorView: View {
 
     let actionID: UUID
 
+    // MARK: - State
+
+    @State private var networkInterfaces: [NetworkInterfaceSnapshot] = NetworkInventoryService.currentIPv4Interfaces()
+
     // MARK: - Derived State
 
     private var actionIndex: Int? {
@@ -58,6 +62,9 @@ struct ActionEditorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            refreshNetworkInterfaces()
+        }
     }
 
     // MARK: - Header
@@ -321,26 +328,33 @@ struct ActionEditorView: View {
     }
 
     private func standardUDPConfiguration(command: Binding<UDPCommand>) -> some View {
-        HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
-            labeledTextField(
-                label: "Destination IP Address",
-                placeholder: "127.0.0.1",
-                text: command.host
-            )
-            .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
+                labeledTextField(
+                    label: "Destination IP Address",
+                    placeholder: "127.0.0.1",
+                    text: command.host
+                )
+                .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
 
-            labeledIntegerField(
-                label: "Port",
-                value: command.port,
-                width: LCCLayout.Actions.portFieldWidth
-            )
+                labeledIntegerField(
+                    label: "Port",
+                    value: command.port,
+                    width: LCCLayout.Actions.portFieldWidth
+                )
 
-            labeledTextField(
-                label: "UDP Message",
-                placeholder: "UDP Message",
-                text: command.message
+                labeledTextField(
+                    label: "UDP Message",
+                    placeholder: "UDP Message",
+                    text: command.message
+                )
+                .frame(maxWidth: .infinity)
+            }
+
+            udpNetworkOptionsRow(
+                sourceIPAddress: command.sourceIPAddress,
+                allowsBroadcast: command.allowsBroadcast
             )
-            .frame(maxWidth: .infinity)
         }
     }
 
@@ -370,7 +384,61 @@ struct ActionEditorView: View {
                 .frame(maxWidth: .infinity)
             }
 
+            udpNetworkOptionsRow(
+                sourceIPAddress: command.sourceIPAddress,
+                allowsBroadcast: command.allowsBroadcast
+            )
+
             syslogPreview(command: command.wrappedValue)
+        }
+    }
+
+    private func udpNetworkOptionsRow(
+        sourceIPAddress: Binding<String>,
+        allowsBroadcast: Binding<Bool>
+    ) -> some View {
+        HStack(alignment: .bottom, spacing: LCCLayout.Actions.messageFieldSpacing) {
+            sourceIPAddressPicker(selection: sourceIPAddress)
+
+            Button {
+                refreshNetworkInterfaces()
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+
+            Toggle("Broadcast", isOn: allowsBroadcast)
+                .toggleStyle(.switch)
+                .frame(width: 128, alignment: .leading)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 2)
+    }
+
+    private func sourceIPAddressPicker(selection: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Source")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("", selection: selection) {
+                Text("Automatic").tag("")
+
+                ForEach(networkInterfaces) { networkInterface in
+                    Text("\(networkInterface.displayName) — \(networkInterface.ipv4Address)")
+                        .tag(networkInterface.ipv4Address)
+                }
+
+                let currentSelection = selection.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if currentSelection.isEmpty == false,
+                   networkInterfaces.contains(where: { $0.ipv4Address == currentSelection }) == false {
+                    Text("Unavailable — \(currentSelection)")
+                        .tag(selection.wrappedValue)
+                }
+            }
+            .labelsHidden()
+            .frame(width: LCCLayout.Actions.sourcePickerWidth)
         }
     }
 
@@ -609,26 +677,33 @@ struct ActionEditorView: View {
     }
 
     private func utilityUDPConfiguration(command: Binding<UtilityCommand>) -> some View {
-        HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
-            labeledTextField(
-                label: "Destination IP Address",
-                placeholder: "127.0.0.1",
-                text: command.udpHost
-            )
-            .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
+                labeledTextField(
+                    label: "Destination IP Address",
+                    placeholder: "127.0.0.1",
+                    text: command.udpHost
+                )
+                .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
 
-            labeledIntegerField(
-                label: "Port",
-                value: command.udpPort,
-                width: LCCLayout.Actions.portFieldWidth
-            )
+                labeledIntegerField(
+                    label: "Port",
+                    value: command.udpPort,
+                    width: LCCLayout.Actions.portFieldWidth
+                )
 
-            labeledTextField(
-                label: "UDP Message",
-                placeholder: "UDP Message",
-                text: command.udpMessage
+                labeledTextField(
+                    label: "UDP Message",
+                    placeholder: "UDP Message",
+                    text: command.udpMessage
+                )
+                .frame(maxWidth: .infinity)
+            }
+
+            udpNetworkOptionsRow(
+                sourceIPAddress: command.udpSourceIPAddress,
+                allowsBroadcast: command.udpAllowsBroadcast
             )
-            .frame(maxWidth: .infinity)
         }
         .padding(12)
         .background(insetPanelBackground)
@@ -939,6 +1014,12 @@ struct ActionEditorView: View {
             .textFieldStyle(.roundedBorder)
             .frame(width: width)
         }
+    }
+
+    // MARK: - Network Inventory
+
+    private func refreshNetworkInterfaces() {
+        networkInterfaces = NetworkInventoryService.currentIPv4Interfaces()
     }
 
     // MARK: - Missing Action
