@@ -18,6 +18,7 @@
 
 import AppKit
 import SwiftUI
+import LunarKit
 
 // MARK: - Shared Layout Constants
 
@@ -249,6 +250,19 @@ extension View {
     }
 }
 
+
+
+private extension LTCAppIdentity {
+    static let launchControlCenter = LTCAppIdentity(
+        initials: "LCC",
+        displayName: LCCLayout.appName,
+        headerTitle: LCCLayout.appNameDisplay,
+        appIconName: "AppIcon",
+        companyIconName: "LTCIcon",
+        companyLogoName: "LTCLogo"
+    )
+}
+
 // MARK: - Compact Brand
 
 struct LCCCompactAppBrand: View {
@@ -354,20 +368,21 @@ struct LCCWindowTopChrome<Trailing: View>: View {
         self.trailing = trailing
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: LCCLayout.Spacing.topChrome) {
-            LCCGlobalAppHeader(showsHelpButton: showsHelpButton)
+    @Environment(\.openWindow) private var openWindow
 
-            LCCScreenHeader(
-                title: title,
-                subtitle: subtitle,
-                systemImage: systemImage,
-                iconColor: iconColor,
-                iconSize: iconSize,
-                titleFont: titleFont,
-                trailing: trailing
-            )
-        }
+    var body: some View {
+        LTCWindowHeader(
+            identity: .launchControlCenter,
+            heading: title,
+            description: subtitle,
+            iconSystemName: systemImage,
+            showsHelpButton: showsHelpButton,
+            helpAction: showsHelpButton ? {
+                openWindow(id: "help-lcc-window")
+                LCCWindowActivation.bringWindowToFront(matchingTitle: "LCC - Help")
+            } : nil,
+            trailing: trailing
+        )
     }
 }
 

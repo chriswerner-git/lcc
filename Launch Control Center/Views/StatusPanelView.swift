@@ -11,6 +11,7 @@
 //
 
 import SwiftUI
+import LunarKit
 
 // MARK: - Dashboard Clock
 
@@ -44,93 +45,22 @@ struct DashboardClockView: View {
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { context in
-            ZStack(alignment: .bottomTrailing) {
-                clockDisplay(for: context.date)
-
-                lowerLeftDiagnostics
-                    .frame(
-                        maxWidth: .infinity,
-                        alignment: .bottomLeading
-                    )
-
-                clockMetadata(
-                    status: appState.clockCheckStatus
-                )
+            LTCDashboardClockPanel(
+                projectName: appState.projectName,
+                currentDate: context.date,
+                computerUptime: UptimeService.formattedComputerUptime(),
+                appUptime: UptimeService.formattedAppUptime(),
+                aboutButtonTitle: "About LCC",
+                aboutAction: {
+                    openWindow(id: "about-lcc-window")
+                },
+                clockText: clockTime(context.date),
+                dateText: "\(dayOfWeek(context.date)), \(calendarDate(context.date))"
+            ) {
+                clockMetadata(status: appState.clockCheckStatus)
             }
-            .padding(.vertical, LCCLayout.Dashboard.clockPanelVerticalPadding)
-            .padding(.horizontal, LCCLayout.Dashboard.clockPanelHorizontalPadding)
-            .background(dashboardCardBackground)
-            .overlay(dashboardCardBorder)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .frame(height: LCCLayout.Dashboard.clockPanelHeight)
-    }
-
-    // MARK: - Clock Display
-
-    private func clockDisplay(for date: Date) -> some View {
-        VStack(spacing: 4) {
-            Text(appState.projectName)
-                .font(.system(
-                    size: LCCLayout.Dashboard.clockProjectNameFontSize,
-                    weight: LCCLayout.Dashboard.clockProjectNameFontWeight,
-                    design: .default
-                ))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, 4)
-
-            Text(clockTime(date))
-                .font(.system(
-                    size: LCCLayout.Dashboard.clockTimeFontSize,
-                    weight: LCCLayout.Dashboard.clockTimeFontWeight,
-                    design: .default
-                ))
-                .monospacedDigit()
-
-            Text("\(dayOfWeek(date)), \(calendarDate(date))")
-                .font(LCCLayout.Dashboard.clockDateFont)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Lower-Left Diagnostics
-
-    private var lowerLeftDiagnostics: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            uptimeMetadata
-            aboutButton
-        }
-        .padding(.leading, 2)
-        .padding(.bottom, 2)
-    }
-
-    private var uptimeMetadata: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Computer Uptime: \(UptimeService.formattedComputerUptime())")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-
-            Text("App Uptime: \(UptimeService.formattedAppUptime())")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-        .help("Computer uptime is time since the Mac last booted. App uptime is time since Launch Control Center started.")
-    }
-
-    private var aboutButton: some View {
-        Button {
-            openWindow(id: "about-lcc-window")
-        } label: {
-            Label("About LCC", systemImage: "info.circle")
-                .font(.caption)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .help("About Launch Control Center")
+        .frame(height: LTCDashboardClockPanelStyle.standard.height)
     }
 
     // MARK: - Clock Metadata

@@ -12,6 +12,7 @@
 
 import AppKit
 import SwiftUI
+import LunarKit
 import UniformTypeIdentifiers
 
 struct SetupView: View {
@@ -42,14 +43,15 @@ struct SetupView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
 
-                HStack(spacing: 0) {
-                    sidebar
-
-                    Divider()
-                        .opacity(0.35)
-
-                    contentPanel
+                LTCPreferencesShell(
+                    identity: lccIdentity,
+                    panes: setupPanes,
+                    selection: $selectedCategory
+                ) { pane in
+                    setupContent(for: pane.id)
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
         }
         .lccWindowPresentation(title: "LCC - Preferences", metrics: LCCLayout.Window.preferences)
@@ -59,6 +61,53 @@ struct SetupView: View {
             refreshNetworkInterfaces()
             refreshConfigurationBackups()
         }
+    }
+
+    // MARK: - LunarKit Preferences Shell
+
+    private var lccIdentity: LTCAppIdentity {
+        LTCAppIdentity(
+            initials: "LCC",
+            displayName: "Launch Control Center",
+            headerTitle: "LAUNCH CONTROL CENTER"
+        )
+    }
+
+    private var setupPanes: [LTCPreferencesPane<SetupCategory>] {
+        SetupCategory.allCases.map { category in
+            LTCPreferencesPane(
+                id: category,
+                title: category.sidebarTitle,
+                subtitle: category.subtitle,
+                systemImage: category.systemImage,
+                sidebarTitle: category.sidebarTitle,
+                detailTitle: category.contentTitle
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func setupContent(for category: SetupCategory) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            switch category {
+            case .appPreferences:
+                appPreferencesCard
+
+            case .network:
+                networkInventoryCard
+
+            case .projectPreferences:
+                projectPreferencesCard
+                volumeControlCard
+
+            case .importExport:
+                configurationBackupCard
+
+            case .resetDefaults:
+                resetDefaultsCard
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Background

@@ -5,13 +5,16 @@
 // └─────────────────────────────────────────────────────────────┘
 //
 //  File: AboutLCCView.swift
-//  Purpose: Custom About window with app metadata, support links, and notices.
+//  Purpose: Custom About window using LunarKit shared About layout with
+//           Launch Control Center-specific contact and operational notices.
 //
+//  Created by Chris Werner / Lunar Telephone Company.
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
 import AppKit
 import SwiftUI
+import LunarKit
 
 struct AboutLaunchControlCenterView: View {
     // MARK: - Constants
@@ -20,7 +23,139 @@ struct AboutLaunchControlCenterView: View {
     private let websiteDisplayText = "www.lunartelephone.com"
     private let websiteURLString = "https://www.lunartelephone.com"
 
-    // MARK: - App Metadata
+    private let identity = LTCAppIdentity(
+        initials: "LCC",
+        displayName: "Launch Control Center",
+        headerTitle: "LAUNCH CONTROL CENTER",
+        appIconName: "AppIcon",
+        companyIconName: "LTCIcon",
+        companyLogoName: "LTCLogo"
+    )
+
+    // MARK: - Body
+
+    var body: some View {
+        ZStack {
+            background
+
+            VStack(alignment: .leading, spacing: LCCLayout.Spacing.section) {
+                LCCWindowTopChrome(
+                    title: "About",
+                    subtitle: "Version, copyright, and operational context.",
+                    systemImage: "paperplane.fill",
+                    iconSize: 54,
+                    showsHelpButton: false
+                )
+
+                LTCAboutShell(
+                    identity: identity,
+                    version: appVersion,
+                    build: buildNumber,
+                    copyrightLine: "© \(copyrightYear) Lunar Telephone Company. All rights reserved."
+                ) {
+                    contactCard
+                    launchControlNoticeCard
+                    licenseCard
+                }
+            }
+            .padding(LCCLayout.Spacing.windowPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .lccWindowPresentation(title: "LCC - About", metrics: LCCLayout.Window.about)
+    }
+
+    // MARK: - Cards
+
+    private var contactCard: some View {
+        LTCCard(title: "Mission Control", systemImage: "paperplane") {
+            VStack(alignment: .leading, spacing: 10) {
+                linkedInfoRow(label: "Website", value: websiteDisplayText, systemImage: "safari") {
+                    openWebsite()
+                }
+
+                linkedInfoRow(label: "Email", value: supportEmail, systemImage: "envelope") {
+                    openSupportEmail()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var launchControlNoticeCard: some View {
+        LTCCard(title: "Launch Control Center Notice", systemImage: "exclamationmark.triangle") {
+            Text(disclaimerText)
+                .font(LTCDesign.FontToken.cardCaption)
+                .foregroundStyle(LTCDesign.ColorToken.secondaryText)
+                .lineSpacing(3)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var licenseCard: some View {
+        LTCCard(title: "License / Terms of Use", systemImage: "doc.text") {
+            ScrollView(.vertical) {
+                Text(licenseText)
+                    .font(LTCDesign.FontToken.cardCaption)
+                    .foregroundStyle(LTCDesign.ColorToken.secondaryText)
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 8)
+            }
+            .frame(height: 118)
+        }
+    }
+
+    // MARK: - Reusable Rows
+
+    private func linkedInfoRow(label: String, value: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .font(LTCDesign.FontToken.cardCaption)
+                .foregroundStyle(LTCDesign.ColorToken.secondaryText)
+                .frame(width: 72, alignment: .leading)
+
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Text(value)
+                        .font(.body.weight(.semibold))
+                    Image(systemName: systemImage)
+                        .font(.caption)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(LTCDesign.ColorToken.accent)
+            .help(value)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Link Actions
+
+    private func openWebsite() {
+        guard let url = URL(string: websiteURLString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func openSupportEmail() {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = supportEmail
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "LCC Support"),
+            URLQueryItem(
+                name: "body",
+                value: "Hello Mission Control,\n\nI need support with Launch Control Center.\n\nVersion: \(appVersion)\nBuild: \(buildNumber)\n"
+            )
+        ]
+
+        guard let url = components.url else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    // MARK: - Metadata
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
@@ -33,177 +168,6 @@ struct AboutLaunchControlCenterView: View {
     private var copyrightYear: String {
         let year = Calendar.current.component(.year, from: Date())
         return "\(year)"
-    }
-
-    // MARK: - Body
-
-    var body: some View {
-        ZStack {
-            background
-
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                appInfoCard
-                contactCard
-                disclaimerCard
-                licenseCard
-            }
-            .padding(22)
-        }
-        .lccWindowPresentation(title: "LCC - About", metrics: LCCLayout.Window.about)
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        LCCWindowTopChrome(
-            title: "About",
-            subtitle: "Version, copyright, and operational context.",
-            systemImage: "paperplane.fill",
-            iconSize: 54
-        )
-    }
-
-    // MARK: - Cards
-
-    private var appInfoCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(
-                title: "Application",
-                subtitle: "Build information"
-            )
-
-            infoRow(label: "Version", value: appVersion)
-            infoRow(label: "Build", value: buildNumber)
-        }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var contactCard: some View {
-        HStack(alignment: .center, spacing: 18) {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader(
-                    title: "Lunar Telephone Company",
-                    subtitle: "Mission Control"
-                )
-
-                linkedInfoRow(
-                    label: "Website",
-                    value: websiteDisplayText,
-                    systemImage: "safari"
-                ) {
-                    openWebsite()
-                }
-
-                linkedInfoRow(
-                    label: "Email",
-                    value: supportEmail,
-                    systemImage: "envelope"
-                ) {
-                    openSupportEmail()
-                }
-
-                Text("© \(copyrightYear) Lunar Telephone Company. All rights reserved.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-            }
-
-            Spacer(minLength: 8)
-
-            Image("LTCIcon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 92, height: 92)
-                .opacity(0.92)
-                .accessibilityLabel("Lunar Telephone Company icon")
-        }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var disclaimerCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(
-                title: "Disclaimer",
-                subtitle: "Operational notice"
-            )
-
-            Text(disclaimerText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var licenseCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(
-                title: "License / Terms of Use",
-                subtitle: "Summary notice"
-            )
-
-            ScrollView(.vertical) {
-                Text(licenseText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.trailing, 8)
-            }
-            .frame(height: 118)
-        }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    // MARK: - Link Actions
-
-    private func openWebsite() {
-        guard let url = URL(string: websiteURLString) else {
-            return
-        }
-
-        NSWorkspace.shared.open(url)
-    }
-
-    private func openSupportEmail() {
-        let body = """
-        Hello Mission Control,
-
-        I need support with Launch Control Center.
-
-        Version: \(appVersion)
-        Build: \(buildNumber)
-        """
-
-        var components = URLComponents()
-        components.scheme = "mailto"
-        components.path = supportEmail
-        components.queryItems = [
-            URLQueryItem(name: "subject", value: "LCC Support"),
-            URLQueryItem(name: "body", value: body)
-        ]
-
-        guard let url = components.url else {
-            return
-        }
-
-        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Notice Text
@@ -226,75 +190,11 @@ struct AboutLaunchControlCenterView: View {
 
         The software, interface design, workflows, configuration structure, documentation, and related materials are the intellectual property of Lunar Telephone Company. No portion may be copied, redistributed, modified, reverse engineered, sublicensed, or used to create derivative software without prior written permission.
 
-        To the maximum extent permitted by law, Lunar Telephone Company shall not be liable for lost profits, missed cues, show interruption, equipment damage, data loss, network failures, incidental damages, consequential damages, or claims arising from use of, or inability to use, this software.
-
         For questions, support, licensing, or permissions, contact missioncontrol@lunartelephone.com.
         """
     }
 
-    // MARK: - Shared UI
-
-    private func sectionHeader(
-        title: String,
-        subtitle: String
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
-                .font(.headline)
-
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-        }
-    }
-
-    private func infoRow(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-
-            Text(value)
-                .font(.body)
-                .textSelection(.enabled)
-
-            Spacer()
-        }
-    }
-
-    private func linkedInfoRow(
-        label: String,
-        value: String,
-        systemImage: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-
-            Button {
-                action()
-            } label: {
-                HStack(spacing: 6) {
-                    Text(value)
-                        .font(.body)
-
-                    Image(systemName: systemImage)
-                        .font(.caption)
-                }
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(LCCDesign.ColorToken.active)
-            .help(value)
-
-            Spacer()
-        }
-    }
+    // MARK: - Background
 
     private var background: some View {
         LinearGradient(
@@ -306,16 +206,5 @@ struct AboutLaunchControlCenterView: View {
             endPoint: .bottom
         )
         .ignoresSafeArea()
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(LCCDesign.ColorToken.controlBackground.opacity(0.72))
-            .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 4)
-    }
-
-    private var cardBorder: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
     }
 }

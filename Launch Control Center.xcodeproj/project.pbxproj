@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C46D62722FEC4EE5008DDC83 /* LunarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C46D62712FEC4EE5008DDC83 /* LunarKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D1C000072FE900000023F75C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C46D62722FEC4EE5008DDC83 /* LunarKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,11 +70,19 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C46D62702FEC4EE5008DDC83 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		C48948312FE6F6070023F75C = {
 			isa = PBXGroup;
 			children = (
 				C489483C2FE6F6070023F75C /* Launch Control Center */,
 				D1C000022FE900000023F75C /* Launch Control CenterTests */,
+				C46D62702FEC4EE5008DDC83 /* Frameworks */,
 				C489483B2FE6F6070023F75C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -103,6 +116,7 @@
 			);
 			name = "Launch Control Center";
 			packageProductDependencies = (
+				C46D62712FEC4EE5008DDC83 /* LunarKit */,
 			);
 			productName = "Launch Control Center";
 			productReference = C489483A2FE6F6070023F75C /* Launch Control Center.app */;
@@ -159,6 +173,9 @@
 			);
 			mainGroup = C48948312FE6F6070023F75C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C46D626F2FEC4ED0008DDC83 /* XCLocalSwiftPackageReference "../../LunarKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C489483B2FE6F6070023F75C /* Products */;
 			projectDirPath = "";
@@ -371,7 +388,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 0.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.lunartelephone.launchcontrolcenter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -429,7 +446,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 0.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.lunartelephone.launchcontrolcenter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -523,6 +540,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C46D626F2FEC4ED0008DDC83 /* XCLocalSwiftPackageReference "../../LunarKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../LunarKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C46D62712FEC4EE5008DDC83 /* LunarKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C46D626F2FEC4ED0008DDC83 /* XCLocalSwiftPackageReference "../../LunarKit" */;
+			productName = LunarKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C48948322FE6F6070023F75C /* Project object */;
 }
