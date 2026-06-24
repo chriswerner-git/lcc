@@ -59,6 +59,7 @@ struct Launch_Control_CenterApp: App {
         eventEditorWindow
         setupWindow
         testingWindow
+        diagnosticsWindow
         aboutWindow
         helpWindow
         menuBarExtra
@@ -139,6 +140,19 @@ struct Launch_Control_CenterApp: App {
         .defaultSize(
             width: LCCLayout.Window.testing.defaultWidth,
             height: LCCLayout.Window.testing.defaultHeight
+        )
+        .windowResizability(.contentMinSize)
+    }
+
+
+    private var diagnosticsWindow: some Scene {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Diagnostics"), id: "diagnostics-window") {
+            DiagnosticsView()
+                .environmentObject(appState)
+        }
+        .defaultSize(
+            width: LCCLayout.Window.preferences.defaultWidth,
+            height: LCCLayout.Window.preferences.defaultHeight
         )
         .windowResizability(.contentMinSize)
     }
@@ -251,6 +265,11 @@ struct Launch_Control_CenterApp: App {
                 openAppWindow(id: "testing-window", title: "LCC - UDP Test")
             }
             .keyboardShortcut("5", modifiers: [.command])
+
+            Button("Diagnostics") {
+                openAppWindow(id: "diagnostics-window", title: LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Diagnostics"))
+            }
+            .keyboardShortcut("6", modifiers: [.command])
 
             Divider()
 

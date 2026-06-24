@@ -12,6 +12,7 @@
 
 import AppKit
 import SwiftUI
+import LunarKit
 
 struct MenuBarView: View {
     // MARK: - Environment
@@ -125,6 +126,13 @@ struct MenuBarView: View {
                 systemImage: "antenna.radiowaves.left.and.right",
                 windowID: "testing-window",
                 windowTitle: "LCC - UDP Test"
+            )
+
+            menuButton(
+                title: "Diagnostics",
+                systemImage: "stethoscope",
+                windowID: "diagnostics-window",
+                windowTitle: LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Diagnostics")
             )
         }
     }
