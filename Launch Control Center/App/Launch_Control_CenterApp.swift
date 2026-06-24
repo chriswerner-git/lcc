@@ -12,6 +12,7 @@
 
 import AppKit
 import SwiftUI
+import LunarKit
 
 final class LaunchControlCenterAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
@@ -64,7 +65,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var dashboardWindow: some Scene {
-        Window("LCC - Dashboard", id: "Dashboard") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Dashboard"), id: "Dashboard") {
             ContentView()
                 .environmentObject(appState)
                 .onAppear {
@@ -83,7 +84,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var scheduleWindow: some Scene {
-        Window("LCC - Schedule", id: "schedule-window") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Schedule"), id: "schedule-window") {
             ScheduleCalendarView()
                 .environmentObject(appState)
         }
@@ -95,7 +96,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var actionsWindow: some Scene {
-        Window("LCC - Define Actions", id: "actions-window") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Define Actions"), id: "actions-window") {
             ActionsView()
                 .environmentObject(appState)
         }
@@ -107,7 +108,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var eventEditorWindow: some Scene {
-        Window("LCC - Add Events", id: "event-editor-window") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Add Events"), id: "event-editor-window") {
             EventEditorView()
                 .environmentObject(appState)
         }
@@ -119,7 +120,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var setupWindow: some Scene {
-        Window("LCC - Preferences", id: "setup-window") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Preferences"), id: "setup-window") {
             SetupView()
                 .environmentObject(appState)
         }
@@ -131,7 +132,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var testingWindow: some Scene {
-        Window("LCC - UDP Test", id: "testing-window") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "UDP Test"), id: "testing-window") {
             TestingView()
                 .environmentObject(appState)
         }
@@ -143,7 +144,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var aboutWindow: some Scene {
-        Window("LCC - About", id: "about-lcc-window") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "About"), id: "about-lcc-window") {
             AboutLaunchControlCenterView()
         }
         .defaultSize(
@@ -154,7 +155,7 @@ struct Launch_Control_CenterApp: App {
     }
 
     private var helpWindow: some Scene {
-        Window("LCC - Help", id: "help-lcc-window") {
+        Window(LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Help"), id: "help-lcc-window") {
             HelpLCCView()
         }
         .defaultSize(

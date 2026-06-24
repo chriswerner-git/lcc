@@ -307,7 +307,7 @@ struct LCCGlobalAppHeader: View {
 
                         Button {
                             openWindow(id: "help-lcc-window")
-                            LCCWindowActivation.bringWindowToFront(matchingTitle: "LCC - Help")
+                            LCCWindowActivation.bringWindowToFront(matchingTitle: LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Help"))
                         } label: {
                             Image(systemName: LCCLayout.TopChrome.helpSystemImage)
                                 .font(.system(
@@ -379,7 +379,7 @@ struct LCCWindowTopChrome<Trailing: View>: View {
             showsHelpButton: showsHelpButton,
             helpAction: showsHelpButton ? {
                 openWindow(id: "help-lcc-window")
-                LCCWindowActivation.bringWindowToFront(matchingTitle: "LCC - Help")
+                LCCWindowActivation.bringWindowToFront(matchingTitle: LTCAppIdentity.windowTitle(initials: "LCC", windowName: "Help"))
             } : nil,
             trailing: trailing
         )

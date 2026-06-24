@@ -862,6 +862,19 @@ struct SetupView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("Project Location")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextField("City, State, or venue", text: $appState.projectLocation)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("Friendly project location label.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Project Notes")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1091,51 +1104,20 @@ struct SetupView: View {
     // MARK: - Import / Export
 
     private var configurationBackupCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(
-                title: "Configuration Backup",
-                subtitle: "Export full backups or selectively import configuration data."
+        VStack(alignment: .leading, spacing: 16) {
+            LTCImportExportTool(
+                exportTitle: "Export Configuration",
+                exportDescription: "Save app settings, project settings, Actions, scheduled Events, recurrence data, notes, and volume settings.",
+                importTitle: "Import Configuration",
+                importDescription: "Choose a Launch Control configuration file, preview its contents, then choose how it should be applied.",
+                replaceTitle: "Import Configuration",
+                replaceDescription: "The import preview will ask whether matching data should be merged or replaced before applying changes.",
+                resetTitle: nil,
+                resetDescription: nil,
+                exportAction: exportConfiguration,
+                importMergeAction: importConfiguration,
+                importReplaceAction: importConfiguration
             )
-
-            HStack(spacing: 12) {
-                Image(systemName: "externaldrive.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(LCCDesign.ColorToken.active)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Full Configuration File")
-                        .font(.subheadline)
-                        .bold()
-
-                    Text("Includes app and project settings, Actions, scheduled Events, repeats, exclusions, notes, and volume output settings.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                Spacer()
-            }
-            .padding(12)
-            .background(insetPanelBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            HStack(spacing: 10) {
-                Button {
-                    exportConfiguration()
-                } label: {
-                    Label("Export Configuration", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button {
-                    importConfiguration()
-                } label: {
-                    Label("Import Configuration", systemImage: "square.and.arrow.down")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
 
             Text(configurationStatus)
                 .font(.caption)
@@ -1151,20 +1133,32 @@ struct SetupView: View {
                 configurationAuditCard(for: configurationAuditSummary)
             }
 
-            Divider()
-                .opacity(0.35)
+            LTCConfigurationToolShell(
+                title: "Diagnostic Bundle",
+                subtitle: "Export support information for troubleshooting or handoff.",
+                systemImage: "stethoscope"
+            ) {
+                LTCConfigurationToolActionRow(
+                    title: "Export Diagnostic Bundle",
+                    description: "Creates a ZIP containing configuration, health report, network inventory, app information, and recent operational logs.",
+                    systemImage: "shippingbox.and.arrow.backward",
+                    buttonTitle: "Export",
+                    level: .info,
+                    action: exportDiagnosticBundle
+                )
 
-            diagnosticBundleSection
-
-            Divider()
-                .opacity(0.35)
+                Text(diagnosticBundleStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(insetPanelBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
 
             restoreFromBackupSection
         }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var configurationStatusColor: Color {
@@ -1428,61 +1422,35 @@ struct SetupView: View {
     // MARK: - Reset / Defaults
 
     private var resetDefaultsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(
-                title: "Restore",
-                subtitle: "Destructive maintenance actions for this Mac and project."
-            )
+        LTCRestoreDefaultsTool(
+            restoreAppDefaults: restoreAppDefaultsFromSharedTool,
+            restoreProjectDefaults: restoreProjectDefaultsFromSharedTool,
+            restoreAllDefaults: restoreAllDefaultsFromSharedTool
+        ) {
+            Divider().overlay(LTCDesign.ColorToken.divider)
 
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(LCCDesign.ColorToken.warning)
-                    .frame(width: 28)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Use these only when you are intentionally clearing or rebuilding setup data.")
-                        .font(.subheadline)
-                        .bold()
-
-                    Text("Each command asks for confirmation before it runs. The app creates an automatic backup before each destructive command, but you should still export important show files before major changes.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-            }
-            .padding(12)
-            .background(insetPanelBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            resetActionRow(
-                operation: .appPreferences,
-                systemImage: "macwindow",
-                title: "Restore Default App Preferences",
-                subtitle: "Resets time display, week start, syslog name, Dock icon behavior, startup, sleep prevention, and log retention."
-            )
-
-            resetActionRow(
-                operation: .projectPreferences,
-                systemImage: "slider.horizontal.3",
-                title: "Restore Default Project Preferences",
-                subtitle: "Resets project identity, notes, UDP defaults, schedule enable messages, volume output, volume presets, and current volume."
-            )
-
-            resetActionRow(
-                operation: .events,
-                systemImage: "calendar.badge.minus",
+            LTCConfirmedConfigurationActionRow(
                 title: "Delete All Events",
-                subtitle: "Deletes all scheduled Events, recurrence data, exclusions, and schedule execution history. Actions remain untouched."
+                description: "Deletes all scheduled Events, recurrence data, exclusions, and schedule execution history. Actions remain untouched.",
+                systemImage: "calendar.badge.minus",
+                buttonTitle: "Delete…",
+                confirmationTitle: "Delete All Events?",
+                confirmationMessage: "This will delete all scheduled Events, recurrence data, exclusions, and schedule execution history. Actions will remain untouched.",
+                confirmButtonTitle: "Delete Events",
+                level: .critical,
+                action: deleteEventsFromSharedTool
             )
 
-            resetActionRow(
-                operation: .actionsAndEvents,
-                systemImage: "trash.fill",
+            LTCConfirmedConfigurationActionRow(
                 title: "Delete All Actions & Events",
-                subtitle: "Deletes all Actions, scheduled Events, recurrence data, exclusions, and schedule execution history."
+                description: "Deletes all Actions, scheduled Events, recurrence data, exclusions, and schedule execution history.",
+                systemImage: "trash.fill",
+                buttonTitle: "Delete…",
+                confirmationTitle: "Delete All Actions and Events?",
+                confirmationMessage: "This will delete all Actions, scheduled Events, recurrence data, exclusions, and schedule execution history.",
+                confirmButtonTitle: "Delete Actions & Events",
+                level: .critical,
+                action: deleteActionsAndEventsFromSharedTool
             )
 
             Text(resetStatus)
@@ -1494,10 +1462,6 @@ struct SetupView: View {
                 .background(insetPanelBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .padding(14)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func resetActionRow(
@@ -1538,6 +1502,57 @@ struct SetupView: View {
         .padding(12)
         .background(insetPanelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func restoreAppDefaultsFromSharedTool() {
+        do {
+            try appState.restoreDefaultAppPreferences()
+            resetStatus = ResetOperation.appPreferences.successMessage
+            refreshConfigurationBackups()
+        } catch {
+            resetStatus = "Restore failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func restoreProjectDefaultsFromSharedTool() {
+        do {
+            try appState.restoreDefaultProjectPreferences()
+            resetStatus = ResetOperation.projectPreferences.successMessage
+            refreshConfigurationBackups()
+        } catch {
+            resetStatus = "Restore failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func restoreAllDefaultsFromSharedTool() {
+        do {
+            try appState.restoreDefaultAppPreferences()
+            try appState.restoreDefaultProjectPreferences()
+            resetStatus = "Default app and project preferences restored."
+            refreshConfigurationBackups()
+        } catch {
+            resetStatus = "Restore failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func deleteEventsFromSharedTool() {
+        do {
+            try appState.deleteAllEvents()
+            resetStatus = ResetOperation.events.successMessage
+            refreshConfigurationBackups()
+        } catch {
+            resetStatus = "Delete failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func deleteActionsAndEventsFromSharedTool() {
+        do {
+            try appState.deleteAllActionsAndEvents()
+            resetStatus = ResetOperation.actionsAndEvents.successMessage
+            refreshConfigurationBackups()
+        } catch {
+            resetStatus = "Delete failed: \(error.localizedDescription)"
+        }
     }
 
     private func performReset(_ operation: ResetOperation) {

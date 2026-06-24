@@ -559,6 +559,10 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(projectName, forKey: "projectName") }
     }
 
+    @Published var projectLocation: String {
+        didSet { UserDefaults.standard.set(projectLocation, forKey: "projectLocation") }
+    }
+
     @Published var projectNotes: String {
         didSet { UserDefaults.standard.set(projectNotes, forKey: "projectNotes") }
     }
@@ -762,6 +766,7 @@ final class AppState: ObservableObject {
         self.dockIconVisibilityPreference = DockIconVisibilityPreference(rawValue: savedDockIconPreference ?? "") ?? .showWhenDashboardWindowIsOpen
 
         self.projectName = UserDefaults.standard.string(forKey: "projectName") ?? "Untitled Project"
+        self.projectLocation = UserDefaults.standard.string(forKey: "projectLocation") ?? ""
         self.projectNotes = UserDefaults.standard.string(forKey: "projectNotes") ?? ""
         self.use24HourTime = UserDefaults.standard.object(forKey: "use24HourTime") as? Bool ?? true
         self.weekStartDay = UserDefaults.standard.object(forKey: "weekStartDay") as? Int ?? 1
@@ -2277,6 +2282,7 @@ final class AppState: ObservableObject {
 
     private func applyBlankShowBaseline() {
         projectName = "Untitled Project"
+        projectLocation = ""
         projectNotes = ""
         incomingUDPPort = 8000
         defaultDestinationHost = "127.0.0.1"
@@ -2540,6 +2546,7 @@ final class AppState: ObservableObject {
         }
 
         projectName = "Untitled Project"
+        projectLocation = ""
         projectNotes = ""
 
         incomingUDPPort = 8000
