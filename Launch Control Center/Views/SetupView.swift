@@ -93,12 +93,12 @@ struct SetupView: View {
             case .appPreferences:
                 appPreferencesCard
 
-            case .network:
-                networkInventoryCard
-
             case .projectPreferences:
                 projectPreferencesCard
                 volumeControlCard
+
+            case .network:
+                networkInventoryCard
 
             case .importExport:
                 configurationBackupCard
@@ -129,7 +129,7 @@ struct SetupView: View {
     private var header: some View {
         LCCWindowTopChrome(
             title: "Preferences",
-            subtitle: "Configure project settings, app preferences, import/export, and reset options.",
+            subtitle: "Configure app behavior, project defaults, network tools, import/export, and restore options.",
             systemImage: "gearshape.fill"
         )
     }
@@ -282,46 +282,47 @@ struct SetupView: View {
 
     // MARK: - App Preferences
 
+    private var timeFormatSelection: Binding<LTCTimeFormat> {
+        Binding(
+            get: {
+                appState.use24HourTime ? .twentyFourHour : .twelveHour
+            },
+            set: { newValue in
+                appState.use24HourTime = (newValue == .twentyFourHour)
+            }
+        )
+    }
+
     private var appPreferencesCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            timePreferencesCard
+            runtimePreferencesCard
+            operationalPreferencesCard
+        }
+    }
+
+    private var timePreferencesCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
-                title: "App Preferences",
-                subtitle: "Controls application behavior and display."
+                title: "Time Preferences",
+                subtitle: "Clock display and schedule calendar behavior."
             )
-
-            preferenceRow(
-                systemImage: "desktopcomputer",
-                title: "Device Name",
-                subtitle: "Hostname used inside generated Syslog messages."
-            ) {
-                TextField(
-                    "Device Name",
-                    text: $appState.syslogDeviceName
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 220)
-            }
-
-            setupDivider
 
             preferenceRow(
                 systemImage: "clock.fill",
                 title: "Time Format",
                 subtitle: appState.use24HourTime ? "Using 24-hour time." : "Using 12-hour time."
             ) {
-                Picker("", selection: $appState.use24HourTime) {
-                    Text("12-Hour").tag(false)
-                    Text("24-Hour").tag(true)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 180)
+                LTCTimeFormatPicker(selection: timeFormatSelection)
+                    .frame(width: 260, alignment: .trailing)
             }
+
+            setupDivider
 
             preferenceRow(
                 systemImage: "calendar",
                 title: "Week Starts On",
-                subtitle: "Used by the Schedule weekly and monthly views."
+                subtitle: "Used by Schedule calendar views."
             ) {
                 Picker("", selection: $appState.weekStartDay) {
                     Text("Sunday").tag(1)
@@ -335,6 +336,29 @@ struct SetupView: View {
                 .labelsHidden()
                 .frame(width: 180)
             }
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var runtimePreferencesCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeader(
+                title: "Runtime Preferences",
+                subtitle: "Local app behavior for this Mac."
+            )
+
+            preferenceRow(
+                systemImage: "desktopcomputer",
+                title: "Device Name",
+                subtitle: "Used inside generated Syslog messages."
+            ) {
+                TextField("Device Name", text: $appState.syslogDeviceName)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+            }
 
             setupDivider
 
@@ -343,10 +367,7 @@ struct SetupView: View {
                 title: "Dock Icon Visibility",
                 subtitle: appState.dockIconVisibilityPreference.preferenceDescription
             ) {
-                Picker(
-                    "",
-                    selection: $appState.dockIconVisibilityPreference
-                ) {
+                Picker("", selection: $appState.dockIconVisibilityPreference) {
                     ForEach(DockIconVisibilityPreference.allCases) { preference in
                         Text(preference.displayName).tag(preference)
                     }
@@ -358,18 +379,14 @@ struct SetupView: View {
 
             preferenceRow(
                 systemImage: "power.circle.fill",
-                title: "Launch App at Startup",
+                title: "Launch at Startup",
                 subtitle: appState.launchAtStartupStatusMessage
             ) {
                 Toggle(
                     "",
                     isOn: Binding(
-                        get: {
-                            appState.launchAtStartupEnabled
-                        },
-                        set: { newValue in
-                            appState.setLaunchAtStartupEnabled(newValue)
-                        }
+                        get: { appState.launchAtStartupEnabled },
+                        set: { appState.setLaunchAtStartupEnabled($0) }
                     )
                 )
                 .labelsHidden()
@@ -384,19 +401,26 @@ struct SetupView: View {
                 Toggle(
                     "",
                     isOn: Binding(
-                        get: {
-                            appState.preventComputerSleepEnabled
-                        },
-                        set: { newValue in
-                            appState.setPreventComputerSleepEnabled(newValue)
-                        }
+                        get: { appState.preventComputerSleepEnabled },
+                        set: { appState.setPreventComputerSleepEnabled($0) }
                     )
                 )
                 .labelsHidden()
                 .toggleStyle(.switch)
             }
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
 
-            setupDivider
+    private var operationalPreferencesCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeader(
+                title: "Operational Preferences",
+                subtitle: "Diagnostic logs and local support tools."
+            )
 
             preferenceRow(
                 systemImage: "clock.arrow.circlepath",
@@ -407,12 +431,8 @@ struct SetupView: View {
                     TextField(
                         "90",
                         value: Binding(
-                            get: {
-                                appState.operationalLogRetentionDays
-                            },
-                            set: { newValue in
-                                appState.operationalLogRetentionDays = min(max(newValue, 1), 3650)
-                            }
+                            get: { appState.operationalLogRetentionDays },
+                            set: { appState.operationalLogRetentionDays = min(max($0, 1), 3650) }
                         ),
                         format: .number.grouping(.never)
                     )
@@ -428,7 +448,7 @@ struct SetupView: View {
             preferenceRow(
                 systemImage: "doc.text.magnifyingglass",
                 title: "Operational Logs",
-                subtitle: "Open the folder containing long-running diagnostic log files."
+                subtitle: "Open the folder containing diagnostic log files."
             ) {
                 Button {
                     appState.openLogsFolder()
@@ -441,24 +461,11 @@ struct SetupView: View {
 
             setupDivider
 
-            Text("Syslog Device Name and Dock Icon visibility are stored on this Mac and are not included in configuration import/export. This allows each playback or control computer to identify itself independently.")
+            Text("Device name and Dock Icon visibility are stored locally on this Mac. Project configurations, Actions, and scheduled Events are not purged automatically.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12)
-
-            Text("Prevent Computer Sleep keeps the Mac awake while Launch Control Center is running. It does not prevent sleep caused by closing a laptop lid, low battery, shutdown, restart, or choosing Sleep manually.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
-
-            Text("Operational logs are disposable diagnostic files. Project configurations, Actions, and scheduled Events are not purged automatically.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 2)
         }
         .padding(14)
         .background(cardBackground)
@@ -649,7 +656,7 @@ struct SetupView: View {
             clockCheckSettingsCard
 
             sectionHeader(
-                title: "Network Inventory",
+                title: "Network Interfaces",
                 subtitle: "Read-only snapshot of local IPv4 interfaces."
             )
 
@@ -837,8 +844,8 @@ struct SetupView: View {
     private var projectPreferencesCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
-                title: "Project",
-                subtitle: "Identity and operator notes for this project."
+                title: "Project Information",
+                subtitle: "Project identity and operator notes."
             )
 
             VStack(alignment: .leading, spacing: 6) {
@@ -849,7 +856,7 @@ struct SetupView: View {
                 TextField("Project Name", text: $appState.projectName)
                     .textFieldStyle(.roundedBorder)
 
-                Text("Shown across the Dashboard and menu bar.")
+                Text("Shown on the Dashboard and startup panels.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -872,7 +879,7 @@ struct SetupView: View {
                             .strokeBorder(LCCDesign.ColorToken.standardBorder, lineWidth: 1)
                     )
 
-                Text("Internal notes for operators, reminders, or handoff context. Stored with this project and included in configuration import/export.")
+                Text("Operator notes stored with this project.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1423,7 +1430,7 @@ struct SetupView: View {
     private var resetDefaultsCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
-                title: "Reset / Defaults",
+                title: "Restore",
                 subtitle: "Destructive maintenance actions for this Mac and project."
             )
 
@@ -2095,10 +2102,14 @@ private final class ConfigurationImportDialog: NSObject {
 
 private enum SetupCategory: String, CaseIterable, Identifiable {
     case appPreferences
-    case network
     case projectPreferences
+    case network
     case importExport
     case resetDefaults
+
+    static var allCases: [SetupCategory] {
+        [.appPreferences, .projectPreferences, .network, .importExport, .resetDefaults]
+    }
 
     var id: String {
         sidebarTitle
@@ -2119,7 +2130,7 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
             return "Import / Export"
 
         case .resetDefaults:
-            return "Reset / Defaults"
+            return "Restore"
         }
     }
 
@@ -2129,7 +2140,7 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
             return "App Preferences"
 
         case .network:
-            return "Network"
+            return "Network Preferences"
 
         case .projectPreferences:
             return "Project Preferences"
@@ -2138,7 +2149,7 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
             return "Import / Export"
 
         case .resetDefaults:
-            return "Reset / Defaults"
+            return "Restore"
         }
     }
 
@@ -2151,7 +2162,7 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
             return "network"
 
         case .projectPreferences:
-            return "slider.horizontal.3"
+            return "folder"
 
         case .importExport:
             return "externaldrive.fill"
@@ -2164,10 +2175,10 @@ private enum SetupCategory: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .appPreferences:
-            return "Application behavior and display preferences."
+            return "Application behavior, time, and local runtime settings."
 
         case .network:
-            return "Read-only local IPv4 interface inventory."
+            return "Network interface inventory and clock-check settings."
 
         case .projectPreferences:
             return "Project identity, notes, playback presets, and UDP output."

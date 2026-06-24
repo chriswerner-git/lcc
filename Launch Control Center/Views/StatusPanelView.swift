@@ -136,6 +136,7 @@ struct DashboardClockView: View {
 
     private static let clockTime12HourFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "h:mm:ss a"
         return formatter
     }()
@@ -153,7 +154,13 @@ struct DashboardClockView: View {
             return DashboardClockView.clockTime24HourFormatter.string(from: date)
         }
 
-        return DashboardClockView.clockTime12HourFormatter.string(from: date)
+        let formattedTime = DashboardClockView.clockTime12HourFormatter.string(from: date)
+        if formattedTime.localizedCaseInsensitiveContains("AM") || formattedTime.localizedCaseInsensitiveContains("PM") {
+            return formattedTime
+        }
+
+        let hour = Calendar.current.component(.hour, from: date)
+        return "\(formattedTime) \(hour < 12 ? "AM" : "PM")"
     }
 }
 
