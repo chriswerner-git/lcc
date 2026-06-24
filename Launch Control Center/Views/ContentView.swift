@@ -518,7 +518,8 @@ private struct ConfigurationHealthDashboardView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .popover(isPresented: $showsDetails, arrowEdge: .top) {
-                ConfigurationHealthDetailsPopover(report: report)
+                ConfigurationHealthDetailsPopover()
+                    .environmentObject(appState)
             }
         }
         .padding(.horizontal, 12)
@@ -547,7 +548,11 @@ private struct ConfigurationHealthDashboardView: View {
 }
 
 private struct ConfigurationHealthDetailsPopover: View {
-    let report: ConfigurationHealthReport
+    @EnvironmentObject var appState: AppState
+
+    private var report: ConfigurationHealthReport {
+        appState.configurationHealthReport
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -580,15 +585,16 @@ private struct ConfigurationHealthDetailsPopover: View {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(report.issues) { issue in
                             ConfigurationHealthIssueRow(issue: issue)
+                                .environmentObject(appState)
                         }
                     }
                     .padding(.trailing, 4)
                 }
-                .frame(maxHeight: 320)
+                .frame(maxHeight: 420)
             }
         }
         .padding(16)
-        .frame(width: 420)
+        .frame(width: 560)
     }
 
     private var healthColor: Color {
@@ -606,7 +612,12 @@ private struct ConfigurationHealthDetailsPopover: View {
 }
 
 private struct ConfigurationHealthIssueRow: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
+
     let issue: ConfigurationHealthIssue
+
+    @State private var eventPendingDeletion: ConfigurationHealthAffectedEvent?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -615,14 +626,20 @@ private struct ConfigurationHealthIssueRow: View {
                 .foregroundStyle(issueColor)
                 .frame(width: 18, height: 18)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(issue.title)
-                    .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(issue.title)
+                        .font(.subheadline.weight(.semibold))
 
-                Text(issue.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(issue.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if issue.kind == .missingActionReferences {
+                    missingActionReferenceDetails
+                }
             }
         }
         .padding(10)
@@ -633,6 +650,60 @@ private struct ConfigurationHealthIssueRow: View {
             )
         )
         .overlay(LCCDesign.cardBorder(cornerRadius: LCCDesign.Radius.inset))
+        .confirmationDialog(
+            "Delete Event?",
+            isPresented: deleteConfirmationBinding,
+            titleVisibility: .visible,
+            presenting: eventPendingDeletion
+        ) { event in
+            Button("Delete Event", role: .destructive) {
+                appState.deleteScheduleEntry(id: event.id)
+                eventPendingDeletion = nil
+            }
+
+            Button("Cancel", role: .cancel) {
+                eventPendingDeletion = nil
+            }
+        } message: { event in
+            Text("This permanently removes Event \(shortID(event.id)). This cannot be undone.")
+        }
+    }
+
+    private var missingActionReferenceDetails: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(issue.affectedEvents) { event in
+                MissingActionEventRepairRow(
+                    event: event,
+                    availableActions: appState.actionDefinitions,
+                    openSchedule: { openScheduleWindow() },
+                    reassignEvent: { actionID in
+                        appState.reassignScheduleEntry(id: event.id, to: actionID)
+                    },
+                    disableEvent: {
+                        appState.disableScheduleEntry(id: event.id)
+                    },
+                    deleteEvent: {
+                        eventPendingDeletion = event
+                    }
+                )
+            }
+        }
+    }
+
+    private var deleteConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { eventPendingDeletion != nil },
+            set: { newValue in
+                if newValue == false {
+                    eventPendingDeletion = nil
+                }
+            }
+        )
+    }
+
+    private func openScheduleWindow() {
+        openWindow(id: "schedule-window")
+        LCCWindowActivation.bringWindowToFront(matchingTitle: "LCC - Schedule")
     }
 
     private var issueColor: Color {
@@ -649,3 +720,139 @@ private struct ConfigurationHealthIssueRow: View {
     }
 }
 
+private struct MissingActionEventRepairRow: View {
+    let event: ConfigurationHealthAffectedEvent
+    let availableActions: [ActionDefinition]
+    let openSchedule: () -> Void
+    let reassignEvent: (UUID) -> Void
+    let disableEvent: () -> Void
+    let deleteEvent: () -> Void
+
+    private var sortedActions: [ActionDefinition] {
+        availableActions.sorted { first, second in
+            if first.type != second.type {
+                return first.type == .show
+            }
+
+            return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(eventDisplayName)
+                        .font(.caption.weight(.semibold))
+
+                    Text(event.enabled ? "Enabled" : "Disabled")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(event.enabled ? LCCDesign.ColorToken.active : .secondary)
+                }
+
+                Text(scheduleDescription)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Text("Missing Action ID: \(event.actionDefinitionID.uuidString)")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            HStack(spacing: 6) {
+                Button {
+                    openSchedule()
+                } label: {
+                    Label("Open Schedule", systemImage: "calendar")
+                }
+                .controlSize(.small)
+
+                Menu {
+                    if sortedActions.isEmpty {
+                        Text("No replacement Actions available")
+                    } else {
+                        ForEach(sortedActions) { action in
+                            Button {
+                                reassignEvent(action.id)
+                            } label: {
+                                Text("\(action.type.rawValue): \(action.name)")
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Reassign", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .menuStyle(.borderlessButton)
+                .controlSize(.small)
+                .disabled(sortedActions.isEmpty)
+
+                Button {
+                    disableEvent()
+                } label: {
+                    Label("Disable", systemImage: "pause.circle")
+                }
+                .controlSize(.small)
+                .disabled(event.enabled == false)
+
+                Button(role: .destructive) {
+                    deleteEvent()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.black.opacity(0.12))
+        )
+    }
+
+    private var eventDisplayName: String {
+        let cleanedSeriesName = event.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if cleanedSeriesName.isEmpty == false {
+            return "Event Series: \(cleanedSeriesName)"
+        }
+
+        return "Event \(shortID(event.id))"
+    }
+
+    private var scheduleDescription: String {
+        if event.repeatsDaily {
+            return "Starts \(Self.dateTimeFormatter.string(from: event.startDate)) • \(repeatDescription)"
+        }
+
+        return "Scheduled for \(Self.dateTimeFormatter.string(from: event.startDate))"
+    }
+
+    private var repeatDescription: String {
+        var parts: [String] = ["repeats"]
+
+        if event.repeatMode == .intervalDuringDay, let intervalMinutes = event.intervalMinutes {
+            parts.append("every \(intervalMinutes) minutes")
+        } else {
+            parts.append("daily")
+        }
+
+        if let repeatUntil = event.repeatUntil {
+            parts.append("until \(Self.dateTimeFormatter.string(from: repeatUntil))")
+        }
+
+        return parts.joined(separator: " ")
+    }
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter
+    }()
+}
+
+private func shortID(_ id: UUID) -> String {
+    String(id.uuidString.prefix(8))
+}

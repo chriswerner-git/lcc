@@ -61,11 +61,65 @@ enum ConfigurationHealthLevel: Int, Codable, Comparable {
     }
 }
 
+enum ConfigurationHealthIssueKind: String, Codable {
+    case general
+    case noActionsDefined
+    case noEventsScheduled
+    case schedulePartiallyDisabled
+    case missingActionReferences
+    case unavailableUDPSource
+    case oversizedUDPPayload
+}
+
+struct ConfigurationHealthAffectedEvent: Identifiable, Codable {
+    var id: UUID
+    var actionDefinitionID: UUID
+    var startDate: Date
+    var enabled: Bool
+    var repeatsDaily: Bool
+    var repeatUntil: Date?
+    var repeatMode: ScheduleRepeatMode
+    var intervalMinutes: Int?
+    var intervalEndTime: Date?
+    var seriesName: String?
+
+    init(event: ScheduleEntry) {
+        self.id = event.id
+        self.actionDefinitionID = event.actionDefinitionID
+        self.startDate = event.startDate
+        self.enabled = event.enabled
+        self.repeatsDaily = event.repeatsDaily
+        self.repeatUntil = event.repeatUntil
+        self.repeatMode = event.repeatMode
+        self.intervalMinutes = event.intervalMinutes
+        self.intervalEndTime = event.intervalEndTime
+        self.seriesName = event.seriesName
+    }
+}
+
 struct ConfigurationHealthIssue: Identifiable, Codable {
     var id: UUID = UUID()
     var level: ConfigurationHealthLevel
     var title: String
     var detail: String
+    var kind: ConfigurationHealthIssueKind = .general
+    var affectedEvents: [ConfigurationHealthAffectedEvent] = []
+
+    init(
+        id: UUID = UUID(),
+        level: ConfigurationHealthLevel,
+        title: String,
+        detail: String,
+        kind: ConfigurationHealthIssueKind = .general,
+        affectedEvents: [ConfigurationHealthAffectedEvent] = []
+    ) {
+        self.id = id
+        self.level = level
+        self.title = title
+        self.detail = detail
+        self.kind = kind
+        self.affectedEvents = affectedEvents
+    }
 }
 
 struct ConfigurationHealthReport: Codable {
@@ -375,6 +429,24 @@ enum AppResetError: LocalizedError {
     }
 }
 
+
+// MARK: - Clock Check
+
+enum ClockCheckStatusLevel {
+    case fresh
+    case stale
+    case unavailable
+}
+
+struct ClockCheckStatus {
+    let level: ClockCheckStatusLevel
+    let title: String
+    let comparisonText: String
+    let detailText: String
+    let result: NTPQueryResult?
+    let errorMessage: String?
+}
+
 final class AppState: ObservableObject {
     let udpService = UDPService()
 
@@ -413,8 +485,10 @@ final class AppState: ObservableObject {
     private let appLaunchDate = Date()
 
     private var dailyHealthLogTimer: Timer?
+    private var ntpRefreshTimer: Timer?
     private var persistenceFailureObserver: NSObjectProtocol?
 
+    private let ntpService = NTPQueryService()
     private let loginStartupService = LoginStartupService()
     private let sleepPreventionService = SleepPreventionService()
     private let systemLifecycleService = SystemLifecycleService()
@@ -496,6 +570,50 @@ final class AppState: ObservableObject {
     @Published var weekStartDay: Int {
         didSet { UserDefaults.standard.set(weekStartDay, forKey: "weekStartDay") }
     }
+
+    @Published var ntpServerAddress: String {
+        didSet { UserDefaults.standard.set(ntpServerAddress, forKey: "ntpServerAddress") }
+    }
+
+    @Published var ntpRefreshIntervalMinutes: Int {
+        didSet {
+            let safeValue = AppState.clampedNTPRefreshIntervalMinutes(ntpRefreshIntervalMinutes)
+            UserDefaults.standard.set(safeValue, forKey: "ntpRefreshIntervalMinutes")
+
+            if safeValue != ntpRefreshIntervalMinutes {
+                ntpRefreshIntervalMinutes = safeValue
+                return
+            }
+
+            restartNTPRefreshTimer()
+        }
+    }
+
+    @Published var ntpFreshMarginMilliseconds: Double {
+        didSet {
+            let safeValue = AppState.clampedNTPFreshMarginMilliseconds(ntpFreshMarginMilliseconds)
+            UserDefaults.standard.set(safeValue, forKey: "ntpFreshMarginMilliseconds")
+
+            if safeValue != ntpFreshMarginMilliseconds {
+                ntpFreshMarginMilliseconds = safeValue
+            }
+        }
+    }
+
+    @Published var ntpErrorMarginMilliseconds: Double {
+        didSet {
+            let safeValue = AppState.clampedNTPErrorMarginMilliseconds(ntpErrorMarginMilliseconds)
+            UserDefaults.standard.set(safeValue, forKey: "ntpErrorMarginMilliseconds")
+
+            if safeValue != ntpErrorMarginMilliseconds {
+                ntpErrorMarginMilliseconds = safeValue
+            }
+        }
+    }
+
+    @Published private(set) var ntpResult: NTPQueryResult?
+    @Published private(set) var ntpErrorMessage: String?
+    @Published private(set) var ntpLastAttemptAt: Date?
 
     // MARK: - UDP Test Defaults
 
@@ -647,6 +765,13 @@ final class AppState: ObservableObject {
         self.projectNotes = UserDefaults.standard.string(forKey: "projectNotes") ?? ""
         self.use24HourTime = UserDefaults.standard.object(forKey: "use24HourTime") as? Bool ?? true
         self.weekStartDay = UserDefaults.standard.object(forKey: "weekStartDay") as? Int ?? 1
+        self.ntpServerAddress = UserDefaults.standard.string(forKey: "ntpServerAddress") ?? NTPQueryService.defaultServer
+        self.ntpRefreshIntervalMinutes = AppState.clampedNTPRefreshIntervalMinutes(UserDefaults.standard.object(forKey: "ntpRefreshIntervalMinutes") as? Int ?? 5)
+        self.ntpFreshMarginMilliseconds = AppState.clampedNTPFreshMarginMilliseconds(UserDefaults.standard.object(forKey: "ntpFreshMarginMilliseconds") as? Double ?? 100)
+        self.ntpErrorMarginMilliseconds = AppState.clampedNTPErrorMarginMilliseconds(UserDefaults.standard.object(forKey: "ntpErrorMarginMilliseconds") as? Double ?? 1_000)
+        self.ntpResult = nil
+        self.ntpErrorMessage = nil
+        self.ntpLastAttemptAt = nil
 
         self.incomingUDPPort = UserDefaults.standard.object(forKey: "incomingUDPPort") as? Int ?? 8000
         self.defaultDestinationHost = UserDefaults.standard.string(forKey: "defaultDestinationHost") ?? "127.0.0.1"
@@ -692,6 +817,7 @@ final class AppState: ObservableObject {
         startSystemLifecycleMonitoring()
         startScheduleEngine()
         startDailyHealthLogging()
+        startNTPRefresh()
 
         logger.info("App launched. Project: \(projectName)")
     }
@@ -701,6 +827,9 @@ final class AppState: ObservableObject {
 
         dailyHealthLogTimer?.invalidate()
         dailyHealthLogTimer = nil
+
+        ntpRefreshTimer?.invalidate()
+        ntpRefreshTimer = nil
 
         if let persistenceFailureObserver {
             NotificationCenter.default.removeObserver(persistenceFailureObserver)
@@ -910,6 +1039,143 @@ final class AppState: ObservableObject {
         AppState.clampedOperationalLogRetentionDays(value)
     }
 
+    fileprivate static func clampedNTPRefreshIntervalMinutes(_ value: Int) -> Int {
+        min(max(value, 1), 60)
+    }
+
+    fileprivate static func clampedNTPFreshMarginMilliseconds(_ value: Double) -> Double {
+        min(max(value, 1), 60_000)
+    }
+
+    fileprivate static func clampedNTPErrorMarginMilliseconds(_ value: Double) -> Double {
+        min(max(value, 1), 600_000)
+    }
+
+    // MARK: - Clock Check
+
+    var clockCheckStatus: ClockCheckStatus {
+        let trimmedServer = ntpServerAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let server = trimmedServer.isEmpty ? NTPQueryService.defaultServer : trimmedServer
+
+        guard let ntpResult else {
+            return ClockCheckStatus(
+                level: .unavailable,
+                title: "Clock Check Unavailable",
+                comparisonText: "System Clock / \(server)",
+                detailText: ntpErrorMessage ?? "No NTP response available.",
+                result: nil,
+                errorMessage: ntpErrorMessage
+            )
+        }
+
+        let ageSeconds = Date().timeIntervalSince(ntpResult.queriedAt)
+        let staleAgeSeconds = TimeInterval(max(ntpRefreshIntervalMinutes, 1) * 120)
+        let offsetMilliseconds = ntpResult.offsetMilliseconds
+        let absoluteOffsetMilliseconds = abs(offsetMilliseconds)
+        let offsetText = Self.formattedMilliseconds(offsetMilliseconds, includeSign: true)
+        let comparison = "System Clock / \(ntpResult.server) (\(offsetText))"
+        let checkedAge = Self.formattedClockCheckAge(ageSeconds)
+        let rttText = Self.formattedMilliseconds(ntpResult.roundTripMilliseconds, includeSign: false)
+        let detail = "Checked \(checkedAge) · RTT \(rttText) · Stratum \(ntpResult.stratum)"
+
+        if ageSeconds > staleAgeSeconds || absoluteOffsetMilliseconds > ntpFreshMarginMilliseconds {
+            return ClockCheckStatus(
+                level: .stale,
+                title: "Time Data Stale",
+                comparisonText: comparison,
+                detailText: detail,
+                result: ntpResult,
+                errorMessage: ntpErrorMessage
+            )
+        }
+
+        return ClockCheckStatus(
+            level: .fresh,
+            title: "Time Data Fresh",
+            comparisonText: comparison,
+            detailText: detail,
+            result: ntpResult,
+            errorMessage: nil
+        )
+    }
+
+    func refreshNTPStatusNow() {
+        refreshNTPStatus()
+    }
+
+    private func startNTPRefresh() {
+        refreshNTPStatus()
+        restartNTPRefreshTimer()
+    }
+
+    private func restartNTPRefreshTimer() {
+        ntpRefreshTimer?.invalidate()
+
+        ntpRefreshTimer = Timer.scheduledTimer(
+            withTimeInterval: TimeInterval(max(ntpRefreshIntervalMinutes, 1) * 60),
+            repeats: true
+        ) { [weak self] _ in
+            self?.refreshNTPStatus()
+        }
+    }
+
+    private func refreshNTPStatus() {
+        let server = ntpServerAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            await MainActor.run {
+                self.ntpLastAttemptAt = Date()
+            }
+
+            do {
+                let result = try await self.ntpService.query(
+                    server: server.isEmpty ? NTPQueryService.defaultServer : server
+                )
+
+                await MainActor.run {
+                    self.ntpResult = result
+                    self.ntpErrorMessage = nil
+                    self.logger.info("Clock check succeeded. Server: \(result.server). Offset: \(Self.formattedMilliseconds(result.offsetMilliseconds, includeSign: true)). RTT: \(Self.formattedMilliseconds(result.roundTripMilliseconds, includeSign: false)).")
+                }
+            } catch {
+                await MainActor.run {
+                    self.ntpErrorMessage = error.localizedDescription
+                    self.logger.warning("Clock check failed. Server: \(server.isEmpty ? NTPQueryService.defaultServer : server). Error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private static func formattedMilliseconds(
+        _ value: Double,
+        includeSign: Bool
+    ) -> String {
+        let sign = includeSign && value >= 0 ? "+" : ""
+        return String(format: "%@%.1fms", sign, value)
+    }
+
+    private static func formattedClockCheckAge(_ seconds: TimeInterval) -> String {
+        let wholeSeconds = max(0, Int(seconds.rounded()))
+
+        if wholeSeconds < 60 {
+            return "\(wholeSeconds)s ago"
+        }
+
+        let minutes = wholeSeconds / 60
+
+        if minutes < 60 {
+            return "\(minutes)m ago"
+        }
+
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        return "\(hours)h \(remainingMinutes)m ago"
+    }
+
     // MARK: - Daily Health Logging
 
     private func startDailyHealthLogging() {
@@ -1057,6 +1323,10 @@ final class AppState: ObservableObject {
             projectNotes: projectNotes,
             use24HourTime: use24HourTime,
             weekStartDay: weekStartDay,
+            ntpServerAddress: ntpServerAddress,
+            ntpRefreshIntervalMinutes: ntpRefreshIntervalMinutes,
+            ntpFreshMarginMilliseconds: ntpFreshMarginMilliseconds,
+            ntpErrorMarginMilliseconds: ntpErrorMarginMilliseconds,
             syslogDeviceName: syslogDeviceName,
             operationalLogRetentionDays: operationalLogRetentionDays,
             dockIconVisibilityPreference: dockIconVisibilityPreference,
@@ -1303,6 +1573,10 @@ final class AppState: ObservableObject {
             projectNotes: projectNotes,
             use24HourTime: use24HourTime,
             weekStartDay: weekStartDay,
+            ntpServerAddress: ntpServerAddress,
+            ntpRefreshIntervalMinutes: ntpRefreshIntervalMinutes,
+            ntpFreshMarginMilliseconds: ntpFreshMarginMilliseconds,
+            ntpErrorMarginMilliseconds: ntpErrorMarginMilliseconds,
             syslogDeviceName: syslogDeviceName,
             operationalLogRetentionDays: operationalLogRetentionDays,
             dockIconVisibilityPreference: dockIconVisibilityPreference,
@@ -1368,6 +1642,7 @@ final class AppState: ObservableObject {
         let health = configurationHealthReport
         let computerUptime = ProcessInfo.processInfo.systemUptime
         let appUptime = Date().timeIntervalSince(appLaunchDate)
+        let clockStatus = clockCheckStatus
 
         return """
         App: Launch Control Center
@@ -1380,6 +1655,9 @@ final class AppState: ObservableObject {
         Scheduled Events: \(scheduleEntries.count)
         Schedule Status: \(diagnosticScheduleStatusText())
         Configuration Health: \(health.title)
+        Clock Check: \(clockStatus.title)
+        Clock Comparison: \(clockStatus.comparisonText)
+        Clock Detail: \(clockStatus.detailText)
 
         Computer Uptime: \(formattedDuration(computerUptime))
         App Uptime: \(formattedDuration(appUptime))
@@ -1952,6 +2230,11 @@ final class AppState: ObservableObject {
     private func applyAppPreferences(from configuration: LaunchControlConfiguration) throws {
         use24HourTime = configuration.use24HourTime
         weekStartDay = configuration.weekStartDay
+        ntpServerAddress = configuration.ntpServerAddress
+        ntpRefreshIntervalMinutes = configuration.ntpRefreshIntervalMinutes
+        ntpFreshMarginMilliseconds = configuration.ntpFreshMarginMilliseconds
+        ntpErrorMarginMilliseconds = configuration.ntpErrorMarginMilliseconds
+        refreshNTPStatusNow()
         syslogDeviceName = configuration.syslogDeviceName
         operationalLogRetentionDays = clampedOperationalLogRetentionDays(configuration.operationalLogRetentionDays)
         dockIconVisibilityPreference = configuration.dockIconVisibilityPreference
@@ -2158,6 +2441,62 @@ final class AppState: ObservableObject {
         return ["\(missingActionEvents.count) Event\(missingActionEvents.count == 1 ? "" : "s") reference missing Actions after import."]
     }
 
+    // MARK: - Configuration Repair Actions
+
+    func disableScheduleEntry(id: UUID) {
+        guard let index = scheduleEntries.firstIndex(where: { $0.id == id }) else {
+            lastMessage = "Unable to disable Event: Event was not found"
+            logger.warning(lastMessage)
+            return
+        }
+
+        scheduleEntries[index].enabled = false
+        resetScheduleOccurrenceGuards()
+
+        let shortID = id.uuidString.prefix(8)
+        lastMessage = "Disabled Event \(shortID)"
+        logger.warning(lastMessage)
+    }
+
+    func deleteScheduleEntry(id: UUID) {
+        let originalCount = scheduleEntries.count
+        scheduleEntries.removeAll { $0.id == id }
+
+        guard scheduleEntries.count != originalCount else {
+            lastMessage = "Unable to delete Event: Event was not found"
+            logger.warning(lastMessage)
+            return
+        }
+
+        scheduleExecutionHistory.removeAll { $0.eventID == id }
+        resetScheduleOccurrenceGuards()
+
+        let shortID = id.uuidString.prefix(8)
+        lastMessage = "Deleted Event \(shortID)"
+        logger.warning(lastMessage)
+    }
+
+    func reassignScheduleEntry(id: UUID, to actionDefinitionID: UUID) {
+        guard actionDefinitions.contains(where: { $0.id == actionDefinitionID }) else {
+            lastMessage = "Unable to reassign Event: replacement Action was not found"
+            logger.warning(lastMessage)
+            return
+        }
+
+        guard let index = scheduleEntries.firstIndex(where: { $0.id == id }) else {
+            lastMessage = "Unable to reassign Event: Event was not found"
+            logger.warning(lastMessage)
+            return
+        }
+
+        scheduleEntries[index].actionDefinitionID = actionDefinitionID
+        resetScheduleOccurrenceGuards()
+
+        let actionName = actionDefinitions.first(where: { $0.id == actionDefinitionID })?.name ?? "replacement Action"
+        lastMessage = "Reassigned Event to \(actionName)"
+        logger.warning(lastMessage)
+    }
+
     // MARK: - Reset / Destructive Actions
 
     func restoreDefaultAppPreferences() throws {
@@ -2171,6 +2510,11 @@ final class AppState: ObservableObject {
 
         use24HourTime = true
         weekStartDay = 1
+        ntpServerAddress = NTPQueryService.defaultServer
+        ntpRefreshIntervalMinutes = 5
+        ntpFreshMarginMilliseconds = 100
+        ntpErrorMarginMilliseconds = 1_000
+        refreshNTPStatusNow()
         operationalLogRetentionDays = 90
         syslogDeviceName = AppState.defaultSyslogDeviceName()
         dockIconVisibilityPreference = .showWhenDashboardWindowIsOpen
@@ -2690,7 +3034,7 @@ final class AppState: ObservableObject {
                 actionStartDate: actionStartDate
             )
 
-        case .sendUDP:
+        case .sendUDP, .sendUDPSyslog:
             sendUtilityUDPCommand(command)
             return controlStatus != .error
         }
@@ -2930,8 +3274,22 @@ final class AppState: ObservableObject {
             return
         }
 
-        if payloadExceedsRecommendedUDPSize(command.udpMessage) {
-            logger.warning("UDP payload for Utility Step \"\(command.name)\" is \(command.udpMessage.utf8.count) bytes. Payloads over \(UDPPayloadValidation.warningByteLimit) bytes may fragment or drop.")
+        let payload: String
+
+        switch command.kind {
+        case .sendUDPSyslog:
+            payload = SyslogMessageFormatter.formattedMessage(
+                severity: command.udpSyslogSeverity,
+                deviceName: syslogDeviceName,
+                message: command.udpMessage
+            )
+
+        default:
+            payload = command.udpMessage
+        }
+
+        if payloadExceedsRecommendedUDPSize(payload) {
+            logger.warning("UDP payload for Utility Step \"\(command.name)\" is \(payload.utf8.count) bytes. Payloads over \(UDPPayloadValidation.warningByteLimit) bytes may fragment or drop.")
         }
 
         let resolvedSource = resolvedUDPSource(
@@ -2945,14 +3303,14 @@ final class AppState: ObservableObject {
         }
 
         udpService.send(
-            message: command.udpMessage,
+            message: payload,
             host: command.udpHost,
             port: UInt16(command.udpPort),
             sourceIPAddress: resolvedSource.sourceIPAddress,
             allowsBroadcast: command.udpAllowsBroadcast
         )
 
-        lastMessage = "Utility UDP Step sent: \(command.name)"
+        lastMessage = "Utility \(command.kind.rawValue) Step sent: \(command.name)"
     }
 
     // MARK: - Volume
@@ -3367,6 +3725,10 @@ private struct LaunchControlConfiguration: Codable {
     let projectNotes: String
     let use24HourTime: Bool
     let weekStartDay: Int
+    let ntpServerAddress: String
+    let ntpRefreshIntervalMinutes: Int
+    let ntpFreshMarginMilliseconds: Double
+    let ntpErrorMarginMilliseconds: Double
 
     let syslogDeviceName: String
     let operationalLogRetentionDays: Int
@@ -3410,6 +3772,10 @@ private struct LaunchControlConfiguration: Codable {
         case projectNotes
         case use24HourTime
         case weekStartDay
+        case ntpServerAddress
+        case ntpRefreshIntervalMinutes
+        case ntpFreshMarginMilliseconds
+        case ntpErrorMarginMilliseconds
 
         case syslogDeviceName
         case operationalLogRetentionDays
@@ -3454,6 +3820,10 @@ private struct LaunchControlConfiguration: Codable {
         projectNotes: String,
         use24HourTime: Bool,
         weekStartDay: Int,
+        ntpServerAddress: String,
+        ntpRefreshIntervalMinutes: Int,
+        ntpFreshMarginMilliseconds: Double,
+        ntpErrorMarginMilliseconds: Double,
         syslogDeviceName: String,
         operationalLogRetentionDays: Int,
         dockIconVisibilityPreference: DockIconVisibilityPreference,
@@ -3489,6 +3859,10 @@ private struct LaunchControlConfiguration: Codable {
         self.projectNotes = projectNotes
         self.use24HourTime = use24HourTime
         self.weekStartDay = weekStartDay
+        self.ntpServerAddress = ntpServerAddress
+        self.ntpRefreshIntervalMinutes = AppState.clampedNTPRefreshIntervalMinutes(ntpRefreshIntervalMinutes)
+        self.ntpFreshMarginMilliseconds = AppState.clampedNTPFreshMarginMilliseconds(ntpFreshMarginMilliseconds)
+        self.ntpErrorMarginMilliseconds = AppState.clampedNTPErrorMarginMilliseconds(ntpErrorMarginMilliseconds)
 
         self.syslogDeviceName = syslogDeviceName
         self.operationalLogRetentionDays = operationalLogRetentionDays
@@ -3535,6 +3909,10 @@ private struct LaunchControlConfiguration: Codable {
         projectNotes = try container.decodeIfPresent(String.self, forKey: .projectNotes) ?? ""
         use24HourTime = try container.decodeIfPresent(Bool.self, forKey: .use24HourTime) ?? true
         weekStartDay = try container.decodeIfPresent(Int.self, forKey: .weekStartDay) ?? 1
+        ntpServerAddress = try container.decodeIfPresent(String.self, forKey: .ntpServerAddress) ?? NTPQueryService.defaultServer
+        ntpRefreshIntervalMinutes = AppState.clampedNTPRefreshIntervalMinutes(try container.decodeIfPresent(Int.self, forKey: .ntpRefreshIntervalMinutes) ?? 5)
+        ntpFreshMarginMilliseconds = AppState.clampedNTPFreshMarginMilliseconds(try container.decodeIfPresent(Double.self, forKey: .ntpFreshMarginMilliseconds) ?? 100)
+        ntpErrorMarginMilliseconds = AppState.clampedNTPErrorMarginMilliseconds(try container.decodeIfPresent(Double.self, forKey: .ntpErrorMarginMilliseconds) ?? 1_000)
 
         syslogDeviceName = try container.decodeIfPresent(String.self, forKey: .syslogDeviceName) ?? AppState.defaultSyslogDeviceName()
         operationalLogRetentionDays = try container.decodeIfPresent(Int.self, forKey: .operationalLogRetentionDays) ?? 90
@@ -3585,6 +3963,10 @@ private struct LaunchControlConfiguration: Codable {
         try container.encode(projectNotes, forKey: .projectNotes)
         try container.encode(use24HourTime, forKey: .use24HourTime)
         try container.encode(weekStartDay, forKey: .weekStartDay)
+        try container.encode(ntpServerAddress, forKey: .ntpServerAddress)
+        try container.encode(ntpRefreshIntervalMinutes, forKey: .ntpRefreshIntervalMinutes)
+        try container.encode(ntpFreshMarginMilliseconds, forKey: .ntpFreshMarginMilliseconds)
+        try container.encode(ntpErrorMarginMilliseconds, forKey: .ntpErrorMarginMilliseconds)
 
         try container.encode(syslogDeviceName, forKey: .syslogDeviceName)
         try container.encode(operationalLogRetentionDays, forKey: .operationalLogRetentionDays)

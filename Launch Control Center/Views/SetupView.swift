@@ -451,8 +451,154 @@ struct SetupView: View {
 
     // MARK: - Network Inventory
 
+    private var clockCheckSettingsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeader(
+                title: "Clock Check",
+                subtitle: "Compare the local system clock against an NTP server."
+            )
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "clock.badge.checkmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(LCCDesign.ColorToken.active)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("NTP Comparison")
+                        .font(.subheadline)
+                        .bold()
+
+                    Text("Launch Control Center checks the configured NTP server in the background and compares that response to the Mac system clock. It does not set the Mac clock.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    appState.refreshNTPStatusNow()
+                } label: {
+                    Label("Check Now", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(12)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 12) {
+                preferenceRow(
+                    systemImage: "server.rack",
+                    title: "NTP Server",
+                    subtitle: "Suggested default: time.apple.com"
+                ) {
+                    TextField("time.apple.com", text: $appState.ntpServerAddress)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 260)
+                }
+
+                setupDivider
+
+                preferenceRow(
+                    systemImage: "timer",
+                    title: "Check Interval",
+                    subtitle: "Suggested default: 5 minutes. Minimum: 1 minute."
+                ) {
+                    Picker("", selection: $appState.ntpRefreshIntervalMinutes) {
+                        Text("1 minute").tag(1)
+                        Text("5 minutes").tag(5)
+                        Text("10 minutes").tag(10)
+                        Text("15 minutes").tag(15)
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
+
+                setupDivider
+
+                preferenceRow(
+                    systemImage: "gauge.with.dots.needle.bottom.50percent",
+                    title: "Fresh Margin",
+                    subtitle: "Suggested default: 100 ms. Larger offsets show Time Data Stale."
+                ) {
+                    HStack(spacing: 6) {
+                        TextField("100", value: $appState.ntpFreshMarginMilliseconds, formatter: Self.decimalFormatter)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 90)
+                            .multilineTextAlignment(.trailing)
+
+                        Text("ms")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                preferenceRow(
+                    systemImage: "exclamationmark.triangle",
+                    title: "Error Margin",
+                    subtitle: "Suggested default: 1000 ms. Reserved for future stronger warnings."
+                ) {
+                    HStack(spacing: 6) {
+                        TextField("1000", value: $appState.ntpErrorMarginMilliseconds, formatter: Self.decimalFormatter)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 90)
+                            .multilineTextAlignment(.trailing)
+
+                        Text("ms")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(12)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            let status = appState.clockCheckStatus
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: clockCheckSystemImage(for: status.level))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(clockCheckColor(for: status.level))
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(status.title)
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundStyle(clockCheckColor(for: status.level))
+
+                    Text(status.comparisonText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Text(status.detailText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer()
+            }
+            .padding(12)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(14)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     private var networkInventoryCard: some View {
         VStack(alignment: .leading, spacing: 14) {
+            clockCheckSettingsCard
+
             sectionHeader(
                 title: "Network Inventory",
                 subtitle: "Read-only snapshot of local IPv4 interfaces."
@@ -609,6 +755,32 @@ struct SetupView: View {
 
     private func refreshNetworkInterfaces() {
         networkInterfaces = NetworkInventoryService.currentIPv4Interfaces()
+    }
+
+    private func clockCheckColor(for level: ClockCheckStatusLevel) -> Color {
+        switch level {
+        case .fresh:
+            return LCCDesign.ColorToken.active
+
+        case .stale:
+            return LCCDesign.ColorToken.warning
+
+        case .unavailable:
+            return LCCDesign.ColorToken.error
+        }
+    }
+
+    private func clockCheckSystemImage(for level: ClockCheckStatusLevel) -> String {
+        switch level {
+        case .fresh:
+            return "checkmark.circle.fill"
+
+        case .stale:
+            return "exclamationmark.triangle.fill"
+
+        case .unavailable:
+            return "xmark.octagon.fill"
+        }
     }
 
     // MARK: - Project Preferences
@@ -1165,6 +1337,14 @@ struct SetupView: View {
     private func formattedBackupDate(_ date: Date) -> String {
         SetupView.backupDateFormatter.string(from: date)
     }
+
+    private static let decimalFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }()
 
     private static let backupDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

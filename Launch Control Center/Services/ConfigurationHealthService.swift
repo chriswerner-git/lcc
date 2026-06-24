@@ -31,7 +31,8 @@ enum ConfigurationHealthService {
                 ConfigurationHealthIssue(
                     level: .warning,
                     title: "No Actions defined",
-                    detail: "Define at least one Show or Utility Action before scheduling playback."
+                    detail: "Define at least one Show or Utility Action before scheduling playback.",
+                    kind: .noActionsDefined
                 )
             )
         }
@@ -41,7 +42,8 @@ enum ConfigurationHealthService {
                 ConfigurationHealthIssue(
                     level: .warning,
                     title: "No Events scheduled",
-                    detail: "No scheduled Events are currently defined. Manual Actions can still run."
+                    detail: "No scheduled Events are currently defined. Manual Actions can still run.",
+                    kind: .noEventsScheduled
                 )
             )
         }
@@ -54,7 +56,8 @@ enum ConfigurationHealthService {
                     detail: disabledScheduleDescription(
                         showActionsEnabled: showActionsEnabled,
                         utilityActionsEnabled: utilityActionsEnabled
-                    )
+                    ),
+                    kind: .schedulePartiallyDisabled
                 )
             )
         }
@@ -65,7 +68,9 @@ enum ConfigurationHealthService {
                 ConfigurationHealthIssue(
                     level: .error,
                     title: "Events reference missing Actions",
-                    detail: "\(missingActionReferences.count) Event\(missingActionReferences.count == 1 ? "" : "s") reference Actions that are no longer defined."
+                    detail: missingActionReferenceDescription(for: missingActionReferences),
+                    kind: .missingActionReferences,
+                    affectedEvents: missingActionReferences.map(ConfigurationHealthAffectedEvent.init)
                 )
             )
         }
@@ -79,7 +84,8 @@ enum ConfigurationHealthService {
                 ConfigurationHealthIssue(
                     level: .warning,
                     title: "Unavailable UDP source IP",
-                    detail: "\(unavailableSourceCount) UDP step\(unavailableSourceCount == 1 ? "" : "s") select a source IP that is not currently available."
+                    detail: "\(unavailableSourceCount) UDP step\(unavailableSourceCount == 1 ? "" : "s") select a source IP that is not currently available.",
+                    kind: .unavailableUDPSource
                 )
             )
         }
@@ -90,7 +96,8 @@ enum ConfigurationHealthService {
                 ConfigurationHealthIssue(
                     level: .warning,
                     title: "Oversized UDP payload",
-                    detail: "\(oversizedMessageCount) message\(oversizedMessageCount == 1 ? "" : "s") exceed the recommended \(UDPPayloadValidation.warningByteLimit)-byte UDP payload limit."
+                    detail: "\(oversizedMessageCount) message\(oversizedMessageCount == 1 ? "" : "s") exceed the recommended \(UDPPayloadValidation.warningByteLimit)-byte UDP payload limit.",
+                    kind: .oversizedUDPPayload
                 )
             )
         }
@@ -100,6 +107,16 @@ enum ConfigurationHealthService {
     }
 
     // MARK: - Private Helpers
+
+    private static func missingActionReferenceDescription(
+        for events: [ScheduleEntry]
+    ) -> String {
+        let count = events.count
+        let eventWord = count == 1 ? "Event" : "Events"
+        let verb = count == 1 ? "references" : "reference"
+
+        return "\(count) \(eventWord) \(verb) Actions that are no longer defined. Open Details to identify, reassign, disable, or delete the affected Event."
+    }
 
     private static func disabledScheduleDescription(
         showActionsEnabled: Bool,
@@ -133,7 +150,7 @@ enum ConfigurationHealthService {
                 }
             }
 
-            for command in action.utilityCommands where command.kind == .sendUDP && !command.udpSourceIPAddress.isEmpty {
+            for command in action.utilityCommands where (command.kind == .sendUDP || command.kind == .sendUDPSyslog) && !command.udpSourceIPAddress.isEmpty {
                 if !availableSourceIPs.contains(command.udpSourceIPAddress) {
                     count += 1
                 }
@@ -152,7 +169,7 @@ enum ConfigurationHealthService {
             }.count
 
             count += action.utilityCommands.filter { command in
-                command.kind == .sendUDP && command.udpMessage.utf8.count > UDPPayloadValidation.warningByteLimit
+                (command.kind == .sendUDP || command.kind == .sendUDPSyslog) && command.udpMessage.utf8.count > UDPPayloadValidation.warningByteLimit
             }.count
         }
 

@@ -54,7 +54,7 @@ struct DashboardClockView: View {
                     )
 
                 clockMetadata(
-                    status: timeDataStatus(for: context.date)
+                    status: appState.clockCheckStatus
                 )
             }
             .padding(.vertical, LCCLayout.Dashboard.clockPanelVerticalPadding)
@@ -135,50 +135,53 @@ struct DashboardClockView: View {
 
     // MARK: - Clock Metadata
 
-    private func clockMetadata(status: ClockDataStatus) -> some View {
+    private func clockMetadata(status: ClockCheckStatus) -> some View {
         VStack(alignment: .trailing, spacing: 3) {
             HStack(spacing: 5) {
                 Circle()
-                    .fill(status.color)
+                    .fill(clockCheckColor(for: status.level))
                     .frame(width: 7, height: 7)
 
-                Text(status.label)
+                Text(status.title)
                     .font(.caption2)
                     .bold()
-                    .foregroundStyle(status.color)
+                    .foregroundStyle(clockCheckColor(for: status.level))
             }
 
-            Text("Source: System Clock")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            Text("Timezone: \(timeZoneText)")
+            Text(status.comparisonText)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
-            Text(utcOffsetText)
+            Text(status.detailText)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Text("Timezone: \(timeZoneText) · \(utcOffsetText)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
         .padding(.trailing, 4)
         .padding(.bottom, 2)
-        .help("This indicates the Dashboard clock is updating from the local system clock. It does not yet verify an external NTP server.")
+        .help("Launch Control Center compares the local system clock against the configured NTP server. It does not set the Mac clock.")
     }
 
-    private func timeDataStatus(for timelineDate: Date) -> ClockDataStatus {
-        let age = abs(Date().timeIntervalSince(timelineDate))
+    private func clockCheckColor(for level: ClockCheckStatusLevel) -> Color {
+        switch level {
+        case .fresh:
+            return LCCDesign.ColorToken.active
 
-        if age <= 3 {
-            return .fresh
+        case .stale:
+            return LCCDesign.ColorToken.warning
+
+        case .unavailable:
+            return LCCDesign.ColorToken.error
         }
-
-        if age <= 30 {
-            return .stale
-        }
-
-        return .missing
     }
 
     // MARK: - Date Formatting
@@ -221,40 +224,6 @@ struct DashboardClockView: View {
         }
 
         return DashboardClockView.clockTime12HourFormatter.string(from: date)
-    }
-}
-
-// MARK: - Clock Data Status
-
-private enum ClockDataStatus {
-    case fresh
-    case stale
-    case missing
-
-    var label: String {
-        switch self {
-        case .fresh:
-            return "Time Data Fresh"
-
-        case .stale:
-            return "Time Data Stale"
-
-        case .missing:
-            return "Time Data Missing"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .fresh:
-            return LCCDesign.ColorToken.active
-
-        case .stale:
-            return .yellow
-
-        case .missing:
-            return LCCDesign.ColorToken.error
-        }
     }
 }
 

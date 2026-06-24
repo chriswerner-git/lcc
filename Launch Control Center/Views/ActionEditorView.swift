@@ -553,7 +553,21 @@ struct ActionEditorView: View {
 
     @ViewBuilder
     private func utilityPayloadWarning(for command: UtilityCommand) -> some View {
-        payloadWarningView(byteCount: command.udpMessage.utf8.count)
+        let payload: String = {
+            switch command.kind {
+            case .sendUDPSyslog:
+                return SyslogMessageFormatter.formattedMessage(
+                    severity: command.udpSyslogSeverity,
+                    deviceName: appState.syslogDeviceName,
+                    message: command.udpMessage
+                )
+
+            default:
+                return command.udpMessage
+            }
+        }()
+
+        payloadWarningView(byteCount: payload.utf8.count)
     }
 
     @ViewBuilder
@@ -727,6 +741,9 @@ struct ActionEditorView: View {
 
         case .sendUDP:
             utilityUDPConfiguration(command: command)
+
+        case .sendUDPSyslog:
+            utilitySyslogConfiguration(command: command)
         }
     }
 
@@ -817,6 +834,72 @@ struct ActionEditorView: View {
         .padding(12)
         .background(insetPanelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+
+    private func utilitySyslogConfiguration(command: Binding<UtilityCommand>) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: LCCLayout.Actions.messageFieldSpacing) {
+                labeledTextField(
+                    label: "Destination IP Address",
+                    placeholder: "127.0.0.1",
+                    text: command.udpHost
+                )
+                .frame(width: LCCLayout.Actions.ipAddressFieldWidth)
+
+                labeledIntegerField(
+                    label: "Port",
+                    value: command.udpPort,
+                    width: LCCLayout.Actions.portFieldWidth
+                )
+
+                syslogSeverityPicker(severity: command.udpSyslogSeverity)
+
+                labeledTextField(
+                    label: "Syslog Message",
+                    placeholder: "Syslog Message",
+                    text: command.udpMessage
+                )
+                .frame(maxWidth: .infinity)
+            }
+
+            udpNetworkOptionsRow(
+                sourceIPAddress: command.udpSourceIPAddress,
+                sourceUnavailablePolicy: command.udpSourceUnavailablePolicy,
+                allowsBroadcast: command.udpAllowsBroadcast
+            )
+
+            utilityPayloadWarning(for: command.wrappedValue)
+
+            utilitySyslogPreview(command: command.wrappedValue)
+        }
+        .padding(12)
+        .background(insetPanelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func utilitySyslogPreview(command: UtilityCommand) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Generated Syslog Preview")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(
+                SyslogMessageFormatter.formattedMessage(
+                    severity: command.udpSyslogSeverity,
+                    deviceName: appState.syslogDeviceName,
+                    message: command.udpMessage
+                )
+            )
+            .font(.system(.caption, design: .monospaced))
+            .lineLimit(2)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(insetPanelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
     }
 
     private func volumePresetButton(
@@ -1185,6 +1268,9 @@ struct ActionEditorView: View {
 
         case .sendUDP:
             return "paperplane.fill"
+
+        case .sendUDPSyslog:
+            return "doc.text.fill"
         }
     }
 

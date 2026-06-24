@@ -55,6 +55,9 @@ struct UtilityCommand: Identifiable, Codable {
     var udpAllowsBroadcast: Bool = false
     var udpMessage: String = ""
 
+    // Used by .sendUDPSyslog. Standard UDP ignores this value.
+    var udpSyslogSeverity: SyslogSeverity = .info
+
     // MARK: - Codable Compatibility
 
     enum CodingKeys: String, CodingKey {
@@ -72,6 +75,7 @@ struct UtilityCommand: Identifiable, Codable {
         case udpSourceUnavailablePolicy
         case udpAllowsBroadcast
         case udpMessage
+        case udpSyslogSeverity
     }
 
     init(
@@ -88,7 +92,8 @@ struct UtilityCommand: Identifiable, Codable {
         udpSourceIPAddress: String = "",
         udpSourceUnavailablePolicy: UDPSourceUnavailablePolicy = .useAutomaticRouting,
         udpAllowsBroadcast: Bool = false,
-        udpMessage: String = ""
+        udpMessage: String = "",
+        udpSyslogSeverity: SyslogSeverity = .info
     ) {
         self.id = id
         self.name = name
@@ -104,6 +109,7 @@ struct UtilityCommand: Identifiable, Codable {
         self.udpSourceUnavailablePolicy = udpSourceUnavailablePolicy
         self.udpAllowsBroadcast = udpAllowsBroadcast
         self.udpMessage = udpMessage
+        self.udpSyslogSeverity = udpSyslogSeverity
     }
 
     init(from decoder: Decoder) throws {
@@ -123,6 +129,7 @@ struct UtilityCommand: Identifiable, Codable {
         udpSourceUnavailablePolicy = try container.decodeIfPresent(UDPSourceUnavailablePolicy.self, forKey: .udpSourceUnavailablePolicy) ?? .useAutomaticRouting
         udpAllowsBroadcast = try container.decodeIfPresent(Bool.self, forKey: .udpAllowsBroadcast) ?? false
         udpMessage = try container.decodeIfPresent(String.self, forKey: .udpMessage) ?? ""
+        udpSyslogSeverity = try container.decodeIfPresent(SyslogSeverity.self, forKey: .udpSyslogSeverity) ?? .info
     }
 
     func encode(to encoder: Encoder) throws {
@@ -142,6 +149,7 @@ struct UtilityCommand: Identifiable, Codable {
         try container.encode(udpSourceUnavailablePolicy, forKey: .udpSourceUnavailablePolicy)
         try container.encode(udpAllowsBroadcast, forKey: .udpAllowsBroadcast)
         try container.encode(udpMessage, forKey: .udpMessage)
+        try container.encode(udpSyslogSeverity, forKey: .udpSyslogSeverity)
     }
 }
 
@@ -151,6 +159,7 @@ enum UtilityCommandKind: String, Codable, CaseIterable, Identifiable {
     case setUtilityScheduleEnabled = "Set Utility Schedule"
     case runAction = "Run Action"
     case sendUDP = "Send UDP"
+    case sendUDPSyslog = "Send UDP Syslog"
 
     var id: String {
         rawValue
