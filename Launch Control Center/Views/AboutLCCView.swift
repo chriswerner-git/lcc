@@ -5,14 +5,12 @@
 // └─────────────────────────────────────────────────────────────┘
 //
 //  File: AboutLCCView.swift
-//  Purpose: Custom About window using LunarKit shared About layout with
-//           Launch Control Center-specific contact and operational notices.
+//  Purpose: Custom About window using LunarKit shared About layout.
 //
 //  Created by Chris Werner / Lunar Telephone Company.
 //  © 2026 Lunar Telephone Company. All rights reserved.
 //
 
-import AppKit
 import SwiftUI
 import LunarKit
 
@@ -51,108 +49,22 @@ struct AboutLaunchControlCenterView: View {
                     identity: identity,
                     version: appVersion,
                     build: buildNumber,
-                    copyrightLine: "© \(copyrightYear) Lunar Telephone Company. All rights reserved."
+                    copyrightLine: "© \(copyrightYear) Lunar Telephone Company. All rights reserved.",
+                    websiteDisplayText: websiteDisplayText,
+                    websiteURLString: websiteURLString,
+                    supportEmail: supportEmail,
+                    noticeTitle: "Launch Control Center Notice",
+                    noticeText: launchControlNoticeText,
+                    licenseTitle: "License / Terms of Use",
+                    licenseText: licenseText
                 ) {
-                    contactCard
-                    launchControlNoticeCard
-                    licenseCard
+                    EmptyView()
                 }
             }
             .padding(LCCLayout.Spacing.windowPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .lccWindowPresentation(title: "LCC - About", metrics: LCCLayout.Window.about)
-    }
-
-    // MARK: - Cards
-
-    private var contactCard: some View {
-        LTCCard(title: "Mission Control", systemImage: "paperplane") {
-            VStack(alignment: .leading, spacing: 10) {
-                linkedInfoRow(label: "Website", value: websiteDisplayText, systemImage: "safari") {
-                    openWebsite()
-                }
-
-                linkedInfoRow(label: "Email", value: supportEmail, systemImage: "envelope") {
-                    openSupportEmail()
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var launchControlNoticeCard: some View {
-        LTCCard(title: "Launch Control Center Notice", systemImage: "exclamationmark.triangle") {
-            Text(disclaimerText)
-                .font(LTCDesign.FontToken.cardCaption)
-                .foregroundStyle(LTCDesign.ColorToken.secondaryText)
-                .lineSpacing(3)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var licenseCard: some View {
-        LTCCard(title: "License / Terms of Use", systemImage: "doc.text") {
-            ScrollView(.vertical) {
-                Text(licenseText)
-                    .font(LTCDesign.FontToken.cardCaption)
-                    .foregroundStyle(LTCDesign.ColorToken.secondaryText)
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.trailing, 8)
-            }
-            .frame(height: 118)
-        }
-    }
-
-    // MARK: - Reusable Rows
-
-    private func linkedInfoRow(label: String, value: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .font(LTCDesign.FontToken.cardCaption)
-                .foregroundStyle(LTCDesign.ColorToken.secondaryText)
-                .frame(width: 72, alignment: .leading)
-
-            Button(action: action) {
-                HStack(spacing: 6) {
-                    Text(value)
-                        .font(.body.weight(.semibold))
-                    Image(systemName: systemImage)
-                        .font(.caption)
-                }
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(LTCDesign.ColorToken.accent)
-            .help(value)
-
-            Spacer(minLength: 0)
-        }
-    }
-
-    // MARK: - Link Actions
-
-    private func openWebsite() {
-        guard let url = URL(string: websiteURLString) else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func openSupportEmail() {
-        var components = URLComponents()
-        components.scheme = "mailto"
-        components.path = supportEmail
-        components.queryItems = [
-            URLQueryItem(name: "subject", value: "LCC Support"),
-            URLQueryItem(
-                name: "body",
-                value: "Hello Mission Control,\n\nI need support with Launch Control Center.\n\nVersion: \(appVersion)\nBuild: \(buildNumber)\n"
-            )
-        ]
-
-        guard let url = components.url else { return }
-        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Metadata
@@ -172,26 +84,12 @@ struct AboutLaunchControlCenterView: View {
 
     // MARK: - Notice Text
 
-    private var disclaimerText: String {
-        """
-        Launch Control Center is an operator-assist tool for configuring and triggering Actions and scheduled Events. Operators are responsible for verifying all Actions, schedules, network settings, connected systems, venue conditions, and show behavior before rehearsal, public operation, or production use.
-
-        Lunar Telephone Company is not responsible for unintended operation, missed cues, incorrect timing, network failures, equipment behavior, data loss, show interruption, or damages resulting from configuration errors, connected-system behavior, or use in production environments.
-        """
+    private var launchControlNoticeText: String {
+        "Launch Control Center is an operator-assist utility for configuring and triggering Actions and scheduled Events. Operators should verify Actions, schedules, network settings, connected systems, venue conditions, and show behavior before rehearsal, public operation, or production use."
     }
 
     private var licenseText: String {
-        """
-        Launch Control Center is licensed for use as an operator-assist configuration, scheduling, and playback utility. Use of this software is at the operator’s own risk.
-
-        This software is provided “as is,” without warranty of any kind, express or implied. Lunar Telephone Company does not warrant that the software will be uninterrupted, error-free, suitable for any specific production environment, or compatible with all networks, control systems, connected devices, or operating conditions.
-
-        Operators are responsible for testing all Actions, scheduled Events, UDP messages, configuration files, connected systems, and show-control behavior before use in rehearsal, public operation, or production environments.
-
-        The software, interface design, workflows, configuration structure, documentation, and related materials are the intellectual property of Lunar Telephone Company. No portion may be copied, redistributed, modified, reverse engineered, sublicensed, or used to create derivative software without prior written permission.
-
-        For questions, support, licensing, or permissions, contact missioncontrol@lunartelephone.com.
-        """
+        "Launch Control Center is provided for authorized configuration, scheduling, and playback support. Use it at your own risk. The software, source code, interface design, workflows, configuration structure, and documentation remain proprietary to Lunar Telephone Company and may not be copied, redistributed, modified, or reused outside authorized work without written permission."
     }
 
     // MARK: - Background

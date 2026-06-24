@@ -95,6 +95,7 @@ struct SetupView: View {
 
             case .projectPreferences:
                 projectPreferencesCard
+                clockCheckSettingsCard
                 volumeControlCard
 
             case .network:
@@ -653,8 +654,6 @@ struct SetupView: View {
 
     private var networkInventoryCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            clockCheckSettingsCard
-
             sectionHeader(
                 title: "Network Interfaces",
                 subtitle: "Read-only snapshot of local IPv4 interfaces."
