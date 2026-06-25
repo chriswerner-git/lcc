@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C46D62722FEC4EE5008DDC83 /* LunarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C46D62712FEC4EE5008DDC83 /* LunarKit */; };
+		C4D547082FECA8F500476B44 /* LunarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C4D547072FECA8F500476B44 /* LunarKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,7 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C46D62722FEC4EE5008DDC83 /* LunarKit in Frameworks */,
+				C4D547082FECA8F500476B44 /* LunarKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,7 +116,7 @@
 			);
 			name = "Launch Control Center";
 			packageProductDependencies = (
-				C46D62712FEC4EE5008DDC83 /* LunarKit */,
+				C4D547072FECA8F500476B44 /* LunarKit */,
 			);
 			productName = "Launch Control Center";
 			productReference = C489483A2FE6F6070023F75C /* Launch Control Center.app */;
@@ -174,7 +174,7 @@
 			mainGroup = C48948312FE6F6070023F75C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C46D626F2FEC4ED0008DDC83 /* XCLocalSwiftPackageReference "../../LunarKit" */,
+				C4D547062FECA8F500476B44 /* XCLocalSwiftPackageReference "../../LunarKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C489483B2FE6F6070023F75C /* Products */;
@@ -542,16 +542,15 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		C46D626F2FEC4ED0008DDC83 /* XCLocalSwiftPackageReference "../../LunarKit" */ = {
+		C4D547062FECA8F500476B44 /* XCLocalSwiftPackageReference "../../LunarKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../LunarKit;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		C46D62712FEC4EE5008DDC83 /* LunarKit */ = {
+		C4D547072FECA8F500476B44 /* LunarKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = C46D626F2FEC4ED0008DDC83 /* XCLocalSwiftPackageReference "../../LunarKit" */;
 			productName = LunarKit;
 		};
 /* End XCSwiftPackageProductDependency section */
